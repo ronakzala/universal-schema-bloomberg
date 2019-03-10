@@ -19,16 +19,17 @@ class GenericCompVS(torch.nn.Module):
     Use some composition function to compose elements along the columns to score
     likely verb and type combinations.
     """
-    def __init__(self, row2idx, col2idx, embedding_path=None, embedding_dim=50,
-                 hidden_dim=50, arg_embedding_dim=None, size_average=False,
-                 criterion='bpr'):
+    def __init__(self, row2idx, col2idx, embedding_path, rel_dim=50,
+                 arg_dim=25, size_average=False, criterion='bpr'):
         """
-        :param row2idx: dict(str:int)
-        :param col2idx: dict(str:int)
-        :param embedding_path: string; path to the row embeddings.
-        :param embedding_dim: int; dimension of the row embeddings.
-        :param hidden_dim: int; dimension of the final column embedding.
-        :param arg_embedding_dim: int; dimension of the argument embeddings.
+        :param row2idx: dict(str:int) relations.
+        :param col2idx: dict(str:int) individual entities though a column
+            is technically a pair of entities.
+        :param embedding_path: string; path to some pretrained embeddings to use
+            for the row and cols. If you want them to be separate, implement it.
+            Initialized randomly if this is None.
+        :param rel_dim: int; dimension of the row embeddings.
+        :param arg_dim: int; dimension of the argument embeddings.
         :param size_average: bool; whether the loss must be averaged across the batch.
         :param criterion: strong; {'bpr'/'nce'}
         """
@@ -37,13 +38,12 @@ class GenericCompVS(torch.nn.Module):
         # https://stackoverflow.com/a/29312145/3262406
         torch.nn.Module.__init__(self)
         self.size_average = size_average
-        self.hidden_dim = hidden_dim
-        self.embedding_dim = embedding_dim
+        self.rel_dim = rel_dim
         # Use the argument embedding size if it isnt None else use the row emb size.
-        self.arg_embedding_dim = arg_embedding_dim if arg_embedding_dim else embedding_dim
-        # In this model the embeddings for rows should be the same
-        # as that for the representations of the columns.
-        assert (self.embedding_dim == self.hidden_dim)
+        self.arg_dim = arg_dim if arg_dim else rel_dim
+        # In this model the embeddings for rows should be twice the size of
+        # the arg_dims because the final col dim is the args concated.
+        assert (self.rel_dim == 2*self.arg_dim)
 
         # Voacb info.
         self.row2idx = row2idx
@@ -54,10 +54,10 @@ class GenericCompVS(torch.nn.Module):
         # Define the elements of the architecture.
         self.row_embeddings = mu.init_embeddings(
             embed_path=embedding_path, word2idx=row2idx,
-            embedding_dim=self.embedding_dim)
+            embedding_dim=self.rel_dim)
         self.col_embeddings = mu.init_embeddings(
             embed_path=embedding_path, word2idx=col2idx,
-            embedding_dim=self.arg_embedding_dim)
+            embedding_dim=self.arg_dim)
         if criterion == 'bpr':
             # TODO: Rename this criterion to be more meaningful and generic. --med-pri.
             self.criterion_bpr = loss.BPRLoss(size_average=size_average)
@@ -81,35 +81,22 @@ class GenericCompVS(torch.nn.Module):
         """
         raise NotImplementedError
 
-    def _row_compose(self, row, row_refs, inference=False):
+    def _row_compose(self, row, inference=False):
         """
         Return the row representations. In this model this is just an embedding
         lookup. And remains the same across all the verb-schema models.
-        :param row: Torch Tensor; the padded and sorted-by-length entities.
-        :param row_refs: list(int); ints saying which seq in row came
-                    from which document. ints in range [0, len(docs)]}
-        :param inference: boolean; if True do pure inference; turn off dropout and dont store gradients.
-        :return: agg_hidden; Torch Variable with the hidden representations for the batch.
+        :param row: Torch Tensor; int mapped row elements.
+        :param inference: boolean; if True do pure inference; turn off dropout
+            and dont store gradients.
+        :return: embeds; Torch Variable with the relation representations for the batch.
         """
-        total_examples = row.size(0)  # Batch size.
-        # Make the doc masks; there must be an easier way to do this. :/
-        row_refs = np.array(row_refs)
-        row_masks = np.zeros((total_examples, total_examples, self.hidden_dim))
-        for ref in xrange(total_examples):
-            row_masks[ref, row_refs == ref, :] = 1.0
-        row_masks = torch.FloatTensor(row_masks)
         # Make them to Variables and move to GPU.
-        row, row_masks = Variable(row, volatile=inference), \
-                         Variable(row_masks, volatile=inference)
+        row = Variable(row, volatile=inference)
         if torch.cuda.is_available():
             row = row.cuda()
-            row_masks = row_masks.cuda()
         # Pass forward.
         embeds = self.row_embeddings(row)
-        # Put the hidden vectors into the unsorted order >_<.
-        agg_hidden = torch.sum(embeds * row_masks, dim=1)
-
-        return agg_hidden
+        return embeds
 
     def _col_compose(self, *input):
         """
@@ -123,8 +110,9 @@ class GenericCompVS(torch.nn.Module):
         """
         Pass through a forward pass and compute scores for the batch rows and
         columns.
-       :param batch_dict: (batch_col_row) dict with the rows, columns and any
+       :param batch_dict: dict with the rows, columns and any
             other data you need.
-        :return: loss; torch Variable.
+        :return: predictions; in some form that one of the utils for writing out
+            knows what to do with.
         """
         raise NotImplementedError
