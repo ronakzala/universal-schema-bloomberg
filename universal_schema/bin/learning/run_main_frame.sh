@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
 use_toy=false
 # Parse command line args.
-while getopts ":a:e:i:d:g:s:r:t" opt; do
+while getopts ":a:e:d:g:s:r:t" opt; do
     case "$opt" in
         a) action=$OPTARG ;;
         e) experiment=$OPTARG ;;
-        i) side_info=$OPTARG ;;
         d) dataset=$OPTARG ;;
         # Train on a specific GPU if specified. Check with nvidia-smi and pick a free one.
         g) gpu_id=$OPTARG;;
@@ -30,9 +29,8 @@ fi
 # Make sure required arguments are passed.
 if [[ "$action" == '' ]] || [[ "$dataset" == '' ]] || [[ "$experiment" == '' ]] || [[ "$suffix" == '' ]]; then
     echo "Must specify action (-a): run_saved/train_model"
-    echo "Must specify experiment (-e): naruys/typevs/typentvs/ltentvs/mementvs/shmementvs/entvs/rnentvs \
-        gnentvs/rnentdepvs/gnentdepvs/rnentsentvs/gnentsentvs/rnentsisentvs/dsentvs/dsentetvs"
-    echo "Must specify dataset (-d): ms500k/conll2009en/conll2012wsj/anyt"
+    echo "Must specify experiment (-e): latfeatus"
+    echo "Must specify dataset (-d): freebase/anyt/fbanyt"
     echo "Must a meaningful suffix to add to the run directory (-s)."
     exit 1
 fi
@@ -49,7 +47,7 @@ get_seeded_random()
   openssl enc -aes-256-ctr -pass pass:"$seed" -nosalt </dev/zero 2>/dev/null
 }
 
-# Source hyperparameters.
+# Source hyperparameters from a config file.
 hparam_config="$CUR_PROJ_DIR/experiments/config/models_config/${dataset}/${experiment}-fixed.conf"
 source "$hparam_config"
 
@@ -67,11 +65,8 @@ if [[ $action == 'train_model' ]]; then
     # Create a subset of training examples.
     temp_train="$shuffled_data_path/train-im-full-subset.json"
     head -n "$train_size" "$train_file" > "$temp_train"
-    if [[ "$experiment" != 'emdsentvs' ]] && [[ "$experiment" != 'emdsentvsdum' ]] && [[ "$experiment" != 'dsentvsdum' ]] && \
-        [[ "$experiment" != 'emdsentposvsdum' ]] && [[ "$experiment" != 'dsentposvsdum' ]]; then
-        temp_train_neg="$shuffled_data_path/train-neg-im-full-subset.json"
-        head -n "$train_size" "$train_neg_file" > "$temp_train_neg"
-    fi
+    temp_train_neg="$shuffled_data_path/train-neg-im-full-subset.json"
+    head -n "$train_size" "$train_neg_file" > "$temp_train_neg"
     # Shuffle this subset file.
     train_file="$temp_train"
     train_neg_file="$temp_train_neg"
@@ -82,12 +77,9 @@ if [[ $action == 'train_model' ]]; then
         fname="$shuffled_data_path/train-im-full-$i.json"
         shuf --random-source=<(get_seeded_random $randomseed) "$train_file" --output="$fname"
         echo "Created: $fname"
-        if [[ "$experiment" != 'emdsentvs' ]] && [[ "$experiment" != 'emdsentvsdum' ]] && [[ "$experiment" != 'dsentvsdum' ]] && \
-            [[ "$experiment" != 'emdsentposvsdum' ]] && [[ "$experiment" != 'dsentposvsdum' ]]; then
-            fname="$shuffled_data_path/train-neg-im-full-$i.json"
-            shuf --random-source=<(get_seeded_random $randomseed) "$train_neg_file" --output="$fname"
-            echo "Created: $fname"
-        fi
+        fname="$shuffled_data_path/train-neg-im-full-$i.json"
+        shuf --random-source=<(get_seeded_random $randomseed) "$train_neg_file" --output="$fname"
+        echo "Created: $fname"
     done
 fi
 
@@ -107,57 +99,12 @@ if [[ $action == 'train_model' ]]; then
             --dataset $dataset \
             --run_path $run_path \
             --train_size $train_size --dev_size $dev_size --test_size $test_size \
-            --hdim $hdim --dropp $dropp\
-            --lstm_comp $lstm_comp\
             --bsize $bsize --epochs $epochs --lr $lr\
             --decay_by $decay_by --decay_every $decay_every --es_check_every $es_check_every\
             --use_toy $use_toy"
     # Additional args needed by each model.
-    if [[ $experiment == 'ltentvs' ]] || [[ $experiment == 'mementvs' ]] || [[ $experiment == 'shmementvs' ]]; then
-        cmd="$cmd --latdim $latdim --side_info $side_info"
-    elif [[ $experiment == 'rnentvs' ]]; then
-        cmd="$cmd --latdim $latdim --argdim $argdim"
-    elif [[ $experiment == 'dsentvs' ]] || [[ $experiment == 'dseventvs' ]] || [[ $experiment == 'dsentvsgro' ]]; then
-        cmd="$cmd --argdim $argdim --outargdim $outargdim"
-    elif [[ $experiment == 'dsentrivsmt' ]]; then
-        cmd="$cmd --argdim $argdim --outargdim $outargdim --lprop $lprop"
-    elif [[ $experiment == 'dsentrivs' ]] || [[ $experiment == 'emdsentvs' ]]; then
-        cmd="$cmd --argdim $argdim --outargdim $outargdim --preddim $preddim"
-    elif [[ $experiment == 'emdsentvssup' ]] || [[ $experiment == 'dsentvssup' ]] || [[ $experiment == 'emdsentvsdum' ]] || \
-        [[ $experiment == 'dsentvsdum' ]]; then
-        cmd="$cmd --argdim $argdim --outargdim $outargdim --preddim $preddim --lprop $reg_lambda"
-    elif [[ "$experiment" == 'emdsentposvsdum' ]] || [[ "$experiment" == 'dsentposvsdum' ]]; then
-        cmd="$cmd --argdim $argdim --outargdim $outargdim --preddim $preddim --lprop $reg_lambda --si_dim $si_dim --side_info
-            $side_info --max_arg_pos $max_arg_pos"
-    elif [[ $experiment == 'dsentetvs' ]]; then
-        cmd="$cmd --argdim $argdim --outargdim $outargdim --si_dim $si_dim --side_info $side_info"
-    elif [[ $experiment == 'dsentposvs' ]]; then
-        cmd="$cmd --argdim $argdim --outargdim $outargdim --si_dim $si_dim --side_info $side_info --max_arg_pos $max_arg_pos"
-    elif [[ $experiment == 'dsentetrivs' ]]; then
-        cmd="$cmd --argdim $argdim --outargdim $outargdim --preddim $preddim --si_dim $si_dim --si_role_dim $si_role_dim --side_info $side_info"
-    elif [[ $experiment == 'dsentposrivs' ]]; then
-        cmd="$cmd --argdim $argdim --outargdim $outargdim --preddim $preddim --si_dim $si_dim --si_role_dim $si_role_dim --side_info $side_info \
-            --max_arg_pos $max_arg_pos"
-    elif [[ $experiment == 'gnentvs' ]]; then
-        cmd="$cmd --latdim $latdim --argdim $argdim --edgenodedim $edgenodedim"
-    elif [[ $experiment == 'rnentdepvs' ]]; then
-        cmd="$cmd --latdim $latdim --argdim $argdim --si_role_dim $si_role_dim --side_info $side_info"
-    elif [[ $experiment == 'gnentdepvs' ]]; then
-        cmd="$cmd --latdim $latdim --argdim $argdim --si_role_dim $si_role_dim --edgenodedim $edgenodedim --side_info $side_info"
-    elif [[ $experiment == 'rnentsentvs' ]]; then
-        sentwordemb_path="$CUR_PROJ_DIR/datasets_proc/${dataset}/embeddings/pretrained_glove"
-        cmd="$cmd --latdim $latdim --argdim $argdim --si_dim $si_dim --si_role_dim $si_role_dim \
-            --sentword_dim $sentword_dim --sentwordemb_path $sentwordemb_path --side_info $side_info"
-    elif [[ $experiment == 'gnentsentvs' ]]; then
-        sentwordemb_path="$CUR_PROJ_DIR/datasets_proc/${dataset}/embeddings/pretrained_glove"
-        cmd="$cmd --latdim $latdim --argdim $argdim --si_dim $si_dim --si_role_dim $si_role_dim \
-            --sentword_dim $sentword_dim --sentwordemb_path $sentwordemb_path --edgenodedim $edgenodedim  --side_info $side_info"
-    elif [[ $experiment == 'rnentsisentvs' ]]; then
-        sentwordemb_path="$CUR_PROJ_DIR/datasets_proc/${dataset}/embeddings/pretrained_glove"
-        cmd="$cmd --latdim $latdim --argdim $argdim --si_role_dim $si_role_dim --sentcon_dim $sentcon_dim\
-            --sentword_dim $sentword_dim --sentwordemb_path $sentwordemb_path --side_info $side_info"
-    elif [[ $experiment == 'typentvs' ]] || [[ $experiment == 'typevs' ]] || [[ $experiment == 'entvs' ]]; then
-        cmd="$cmd"
+    if [[ $experiment == 'latfeatus' ]]; then
+        --rdim $rdim --dropp $dropp --argdim $argdim
     fi
     eval $cmd 2>&1 | tee -a ${log_file}
 elif [[ $action == 'run_saved' ]]; then

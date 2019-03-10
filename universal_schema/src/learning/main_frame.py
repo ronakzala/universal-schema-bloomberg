@@ -30,7 +30,7 @@ def train_model(model_name, int_mapped_path, model_hparams, train_hparams,
     :param train_hparams: dict; hyperparameters for the trainer.
     :param run_path: string; path to which results and model gets saved.
     :param embedding_path: string; optionally the path from which to load
-        pre-trained embeddings for the rows and column elements. Unused and never passed. :/
+        pre-trained embeddings for the rows and column elements. UNUSED.
     :param dataset: string; says which dataset it is {freebase/anyt/fbanyt}
         use freebase alone, use anyt alone or use the combination of fb and anyt.
     :param use_toy: boolean; whether you should use a small subset of examples
@@ -38,18 +38,20 @@ def train_model(model_name, int_mapped_path, model_hparams, train_hparams,
     :return: None.
     """
     # Load word2idx maps.
+    # op2idx is the mapping from relation strings to ints.
     map_fname = os.path.join(int_mapped_path, 'op2idx-full.json')
     with codecs.open(map_fname, 'r', 'utf-8') as mapf:
         op2idx = json.load(mapf)
+    # ent2idx is the mapping from individual entities/argument strings of
+    # relations to ints.
     map_fname = os.path.join(int_mapped_path, 'ent2idx-full.json')
     with codecs.open(map_fname, 'r', 'utf-8') as mapf:
         ent2idx = json.load(mapf)
     # Unpack hyperparameter settings.
     # hdim isnt always the lstm hidden dimension its unfortunate that I named it
     # that way but it refers to the dimension of the argument set.
-    hdim, dropp = model_hparams['rdim'], model_hparams['dropp']
+    rdim, dropp = model_hparams['rdim'], model_hparams['dropp']
     argdim = model_hparams['argdim']
-    lstm_comp = model_hparams['lstm_comp']
     # Unpack training hparams.
     bsize, epochs, lr = train_hparams['bsize'], train_hparams['epochs'], train_hparams['lr']
     decay_every, decay_by = train_hparams['decay_every'], train_hparams['decay_by']
@@ -71,8 +73,8 @@ def train_model(model_name, int_mapped_path, model_hparams, train_hparams,
 
     # Initialize model.
     if model_name in ['latfeatus']:
-        model = compus.CompVS(row2idx=op2idx, col2idx=ent2idx, embedding_dim=rdim,
-                              hidden_dim=rdim, dropout=dropp, lstm_comp=lstm_comp)
+        model = compus.LatentFeatureUS(row2idx=op2idx, col2idx=ent2idx, rel_dim=rdim,
+                                       arg_dim=argdim, dropout=dropp)
     else:
         logging.error('Unknown model: {:s}'.format(model_name))
         sys.exit(1)
@@ -103,7 +105,7 @@ def train_model(model_name, int_mapped_path, model_hparams, train_hparams,
 
 
 def run_saved_model(model_name, int_mapped_path, run_path, dataset, embedding_path=None,
-                    sentwordemb_path=None, use_toy=False):
+                    use_toy=False):
     """
     Read the int training and dev data, initialize and run a saved model.
     :param model_name: string; says which model to use.
@@ -111,12 +113,10 @@ def run_saved_model(model_name, int_mapped_path, run_path, dataset, embedding_pa
         and the test and dev json files.
     :param run_path: string; path to which results are saved and from where
         model gets read.
-    :param dataset: string; {anyt/ms500k} used to select the set of files
+    :param dataset: string; {freebase/anyt/fbanyt} used to select the set of files
         predictions are made on.
     :param embedding_path: string; optionally the path from which to load
-        pre-trained embeddings.
-    :param sentwordemb_path: string; path to load the pretrained embeddings for sentence
-        context words from. Used in models using sentence context.
+        pre-trained embeddings. UNUSED.
     :param use_toy: boolean; whether you should use a small subset of examples
         to debug train.
     :return: None.
@@ -134,106 +134,13 @@ def run_saved_model(model_name, int_mapped_path, run_path, dataset, embedding_pa
         run_info = json.load(fp)
         model_hparams = run_info['model_hparams']
         train_hparams = run_info['train_hparams']
-        try:
-            side_info = run_info['side_info']
-        # Handle this for backward compatibility with the existing trained models.
-        except KeyError:
-            if model_name in ['ltentvs', 'mementvs', 'shmementvs']:
-                side_info = 'types'
-            elif model_name in ['rnentdepvs', 'gnentdepvs']:
-                side_info = 'deps'
-            else:
-                side_info = None
-    # Load up side info maps.
-    if side_info == 'types' and model_name != 'dsentposrivs':
-        map_fname = os.path.join(int_mapped_path, 'type2idx-full.json')
-        with codecs.open(map_fname, 'r', 'utf-8') as mapf:
-            sideinfo2idx = json.load(mapf)
-    elif side_info == 'deps' and model_name != 'dsentposrivs':
-        map_fname = os.path.join(int_mapped_path, 'deps2idx-full.json')
-        with codecs.open(map_fname, 'r', 'utf-8') as mapf:
-            sideinfo2idx = json.load(mapf)
-    # Position embedding NOT part of speech.
-    elif model_name in ['dsentposrivs', 'dsentposvs', 'emdsentposvsdum', 'dsentposvsdum']:
-        max_arg_pos = model_hparams['max_arg_pos']
-        if model_name in ['dsentposrivs']:
-            # Create a side info dict on the fly. Just the argument position embeddings.
-            sideinfo2idx = dict([(unicode(i), i) for i in range(max_arg_pos+4)])
-            # TODO: HACK so that the batcher code doesnt try to read a 'pos' field from the files.
-            side_info = 'types' if dataset == 'ms500k' else 'deps'
-        elif model_name in ['dsentposvs', 'emdsentposvsdum', 'dsentposvsdum']:
-            sideinfo2idx = dict([(unicode(i), i) for i in range(2*max_arg_pos + 4)])
-    else:
-        assert (model_name in {'naryus', 'typevs', 'typentvs', 'entvs', 'rnentvs', 'gnentvs',
-                               'rnentsentvs', 'gnentsentvs', 'dsentvs', 'dsentvsgro', 'dsentrivs', 'dseventvs',
-                               'dsentrivsmt', 'emdsentvs', 'emdsentvssup', 'dsentvssup',
-                               'emdsentvsdum', 'dsentvsdum', 'emdsentposvsdum', 'dsentposvsdum'})
-        logging.info("Not using any side information.")
-
-    if model_name in ['rnentsentvs', 'gnentsentvs', 'rnentsisentvs']:
-        map_fname = os.path.join(int_mapped_path, 'sentword2idx-full.json')
-        with codecs.open(map_fname, 'r', 'utf-8') as mapf:
-            sentword2idx = json.load(mapf)
-
     # Unpack hyperparameter settings.
     rdim, dropp = model_hparams['rdim'], model_hparams['dropp']
-    # This ensures that this function can be called on the already trained models
-    # which did not have this as an model hyperparameter. Those assume 'hidden'.
-    lstm_comp = model_hparams['lstm_comp'] if 'lstm_comp' in model_hparams else 'hidden'
-    if model_name in ['ltentvs', 'mementvs', 'shmementvs', 'rnentvs', 'gnentvs', 'rnentdepvs', 'gnentdepvs',
-                      'rnentsentvs', 'gnentsentvs', 'rnentsisentvs']:
-        latdim = model_hparams['latdim']
-    if model_name in ['rnentvs', 'gnentvs', 'rnentdepvs', 'gnentdepvs', 'rnentsentvs', 'gnentsentvs',
-                      'rnentsisentvs', 'dsentvs', 'dsentvsgro', 'dsentetvs', 'dsentrivs', 'dseventvs', 'dsentrivsmt',
-                      'dsentetrivs', 'dsentposrivs', 'emdsentvs', 'emdsentvssup', 'dsentvssup',
-                      'emdsentvsdum', 'dsentvsdum', 'dsentposvs', 'emdsentposvsdum', 'dsentposvsdum']:
-        try:
-            argdim = model_hparams['argdim']
-        # Backward compatibility.
-        except KeyError:
-            argdim = rdim
-    if model_name in ['dsentvs', 'dsentvsgro', 'dsentetvs', 'dsentrivs', 'dseventvs', 'dsentrivsmt',
-                      'dsentetrivs', 'dsentposrivs', 'emdsentvs', 'emdsentvssup', 'dsentvssup',
-                      'emdsentvsdum', 'dsentvsdum', 'dsentposvs', 'emdsentposvsdum', 'dsentposvsdum']:
-        outargdim = model_hparams['outargdim']
-    if model_name in ['dsentrivs', 'dsentetrivs', 'dsentetrivs', 'dsentposrivs', 'emdsentvs',
-                      'emdsentvssup', 'dsentvssup', 'emdsentvsdum', 'dsentvsdum', 'emdsentposvsdum',
-                      'dsentposvsdum']:
-        preddim = model_hparams['preddim']
-    if model_name in ['dsentrivsmt', 'emdsentvssup', 'dsentvssup', 'emdsentvsdum', 'dsentvsdum',
-                      'emdsentposvsdum', 'dsentposvsdum']:
-        lprop = model_hparams['lprop']
-    if model_name in ['dsentetvs', 'dsentposvs', 'emdsentposvsdum', 'dsentposvsdum']:
-        si_dim = model_hparams['si_dim']
-    if model_name in ['dsentetrivs', 'dsentposrivs']:
-        si_dim = model_hparams['si_dim']
-        si_role_dim = model_hparams['si_role_dim']
-    if model_name in ['gnentvs', 'gnentdepvs', 'gnentsentvs']:
-        edgenodedim = model_hparams['edgenodedim']
-    if model_name in ['rnentdepvs', 'gnentdepvs']:
-        si_role_dim = model_hparams['si_role_dim']
-        # The side info dimension is the same as the number of items in the map.
-        # padding, start stop included for now.
-        si_dim = len(sideinfo2idx)
-    if model_name in ['rnentsentvs', 'gnentsentvs']:
-        sentword_dim = model_hparams['sentword_dim']
-        si_role_dim = model_hparams['si_role_dim']
-        si_dim = model_hparams['si_dim']
-    if model_name in ['rnentsisentvs']:
-        sentword_dim = model_hparams['sentword_dim']
-        sentcon_dim = model_hparams['sentcon_dim']
-        part_si_dim = len(sideinfo2idx)
-        # The sentence context and the column element side info form the full side info.
-        si_dim = sentcon_dim + part_si_dim
-        si_role_dim = model_hparams['si_role_dim']
-
+    argdim = model_hparams['argdim']
     bsize, epochs, lr = train_hparams['bsize'], train_hparams['epochs'], train_hparams['lr']
     train_size, dev_size, test_size = train_hparams['train_size'], train_hparams['dev_size'], \
                                       train_hparams['test_size']
 
-    # Using toy might be im-perfect because this is saying read the first set N
-    # examples from the per-epoch train shuffled train file. So you're actually
-    # training on more than N train examples in total, different N in each epoch.
     if use_toy:
         train_size, dev_size, test_size = 5000, 5000, 5000
     logging.info('Model hyperparams:')
@@ -242,9 +149,9 @@ def run_saved_model(model_name, int_mapped_path, run_path, dataset, embedding_pa
     logging.info(pprint.pformat(train_hparams))
 
     # Initialize model.
-    if model_name in ['typevs', 'typentvs', 'entvs']:
-        model = compus.CompVS(row2idx=op2idx, col2idx=ent2idx, embedding_dim=rdim,
-                              hidden_dim=rdim, dropout=dropp, lstm_comp=lstm_comp)
+    if model_name in ['latfeatus']:
+        model = compus.LatentFeatureUS(row2idx=op2idx, col2idx=ent2idx, rel_dim=rdim,
+                                       arg_dim=argdim, dropout=dropp)
     else:
         logging.error('Unknown model: {:s}'.format(model_name))
         sys.exit(1)
@@ -277,8 +184,7 @@ def run_saved_model(model_name, int_mapped_path, run_path, dataset, embedding_pa
                   'ev_test_size': ev_test_size}
     run_info = {'model_hparams': model_hparams,
                 'train_hparams': train_hparams,
-                'eval_hparams': eval_sizes,
-                'side_info': side_info}
+                'eval_hparams': eval_sizes}
     with codecs.open(os.path.join(run_path, 'run_info.json'), 'w', 'utf-8') as fp:
         json.dump(run_info, fp)
     # Make predictions on all splits and write them to disk incrementally.
