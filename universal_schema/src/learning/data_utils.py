@@ -90,27 +90,13 @@ def make_predictions(int_mapped_path, dataset, batcher, model, result_path, rep_
     :param test_size: int; number of test examples.
     :return: None.
     """
-    # Make predictions on the positive example test, dev and train sets.
-    if dataset == 'ms500k':
-        # TODO: Make predictions on the gold edge placements and see how
-        # disambiguation eval does. --low-pri.
-        split_fnames = [(6796, 'ep-test-candidates-im-full', 'ep-test-candidates'),
-                        (920, 'ep-dev-candidates-im-full', 'ep-dev-candidates')]
-    elif dataset == 'anyt':
+    # Make predictions on the specified data. This will simply write a file with the
+    # model assigned probabilities to the triples in the file specified below.
+    if dataset == 'freebase':
+        raise NotImplementedError
+        # TODO: Place your test time splits here. <size, fname, non-int mapped fname>.
         split_fnames = [(1173075, 'ep-test-llpdepcandidates-im-full', 'ep-test-llpdepcandidates'),
-                        (110663, 'ep-dev-llpdepcandidates-im-full', 'ep-dev-llpdepcandidates'),
-                        (951331, 'ep-test-llpdepcandidates-fcw-im-full', 'ep-test-llpdepcandidates-fcw'),
-                        (88362, 'ep-dev-llpdepcandidates-fcw-im-full', 'ep-dev-llpdepcandidates-fcw'),
-                        (335118, 'ep-test-grocandidates-im-full', 'ep-test-grocandidates'),
-                        (31433, 'ep-dev-grocandidates-im-full', 'ep-dev-grocandidates'),
-                        (2736126, 'ep-test-candidates-im-full', 'ep-test-candidates'),
-                        (252279, 'ep-dev-candidates-im-full', 'ep-dev-candidates'),
-                        (1175753, 'ep-test-pdepcandidates-im-full', 'ep-test-pdepcandidates'),
-                        (110234, 'ep-dev-pdepcandidates-im-full', 'ep-dev-pdepcandidates'),
-                        (2182202, 'ep-test-candidates-fcw-im-full', 'ep-test-candidates-fcw'),
-                        (199325, 'ep-dev-candidates-fcw-im-full', 'ep-dev-candidates-fcw'),
-                        (954578, 'ep-test-pdepcandidates-fcw-im-full', 'ep-test-pdepcandidates-fcw'),
-                        (88496, 'ep-dev-pdepcandidates-fcw-im-full', 'ep-dev-pdepcandidates-fcw')]
+                        (110663, 'ep-dev-llpdepcandidates-im-full', 'ep-dev-llpdepcandidates')]
     else:
         raise ValueError("Unknown dataset: {:s}".format(dataset))
     for num_examples, fname, split_str in split_fnames:
@@ -173,6 +159,7 @@ def prob_negs(int_mapped_path, batcher, model, result_path, rep_size,
     This is a utility function that must be called and only by the
     make_predictions* functions.
     """
+    raise NotImplementedError
     # Make predictions on the negative example test, dev and train sets so you
     # can draw prc curves.
     split_fnames = [(132, 'manual-dev-neg-im-full', 'manual-dev-neg'),
