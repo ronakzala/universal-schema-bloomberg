@@ -121,36 +121,6 @@ def init_embeddings(embed_path, word2idx, embedding_dim):
     return embed
 
 
-def init_latent_types(type2idx, latent_width, embedding_dim):
-    """
-    Return a set of flattened matrices as a torch.nn.Embedding.
-    :param type2idx: dict(typestr:int); type string to int mapping;
-        <pad> needs to be 0.
-    :param latent_width: int; the dimension of the space into which embeddings
-        will get mapped.
-    :param embedding_dim: int; the embedding dimension of the word embeddings.
-    :return:
-        flat_latent_mat: a torch.nn.Embedding with the matrices
-            flattened to vectors.
-    """
-    num_types = len(type2idx)
-    # Initialize from a normal distribution. I'm not sure if this is the "correct"
-    # thing to do because dont you want every matrix to come from a 2d MVN instead
-    # of one 3d MVN.
-    random_normals = torch.randn(num_types, latent_width*embedding_dim) * 0.01
-    # Set the padding token embedding to zero. This is necessary because we want
-    # to initialize with our set of initialized values. If you used nn.Embedding
-    # out of the box it would already be initialized with a normal and have pad
-    # set to zero.
-    random_normals[0] = torch.FloatTensor(latent_width*embedding_dim).zero_()
-    logging.info('Initialized latent types from torch.randn: {}'.
-                 format(random_normals.size()))
-    # Flattened matrix.
-    latent_mats = torch.nn.Embedding(num_types, latent_width*embedding_dim)
-    latent_mats.weight = torch.nn.Parameter(random_normals)
-    return latent_mats
-
-
 if __name__ == '__main__':
     d={'<pad>':0, 'subj': 1, 'dobj':2, 'xcomp':3, 'ccomp': 4}
     print(init_onehot(d))
