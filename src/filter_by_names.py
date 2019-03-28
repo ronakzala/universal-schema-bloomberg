@@ -40,7 +40,7 @@ def match_article_to_politician(fname, set_politicians):
 	'''
 	fname = fname.strip()
 	full_path = os.path.join(dir_path, fname)
-	comm =  rcff(dir_path)
+	comm = rcff(full_path)
 	filtered_dictionary = {}
 	count = 0
 
@@ -96,7 +96,7 @@ def get_filtered_files():
 	poltician_set = get_politician_set()
 	filtered_articles = {politician: [] for politician in politician_set}
 
-	for politician_article_dicts in process_pool.imap_unordered(match_article_to_politician, names, chunksize=mp.cpu_count()):
+	for politician_article_dicts in process_pool.imap_unordered(match_article_to_politician, names, politician_set, chunksize=mp.cpu_count()):
 		for k, v in politician_article_dicts.items():
 			filtered_articles[k].extend(v)
 	process_pool.close()
