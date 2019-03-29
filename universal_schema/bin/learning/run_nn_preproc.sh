@@ -44,17 +44,17 @@ if [[ $action == 'int_map' ]]; then
     eval ${cmd} 2>&1 | tee -a ${log_file}
 elif [[ $action == 'readable_neg' ]]; then
     # Create shuffled negative data examples for each split.
-    train_file="$splits_path/train.json"
-    dev_file="$splits_path/dev.json"
-    test_file="$splits_path/test.json"
+    train_file="$splits_path/train"
+    dev_file="$splits_path/dev"
+    test_file="$splits_path/test"
     neg_data_path="$splits_path/neg"
     mkdir -p "$neg_data_path"
-    shuf "$train_file" > "$neg_data_path/train-shuf.json"
-    echo "Created: $neg_data_path/train-shuf.json"
-    shuf "$dev_file" > "$neg_data_path/dev-shuf.json"
-    echo "Created: $neg_data_path/dev-shuf.json"
-    shuf "$test_file" > "$neg_data_path/test-shuf.json"
-    echo "Created: $neg_data_path/test-shuf.json"
+    shuf "$train_file" > "$neg_data_path/train-shuf"
+    echo "Created: $neg_data_path/train-shuf"
+    shuf "$dev_file" > "$neg_data_path/dev-shuf"
+    echo "Created: $neg_data_path/dev-shuf"
+    shuf "$test_file" > "$neg_data_path/test-shuf"
+    echo "Created: $neg_data_path/test-shuf"
 
     # Create readable negs.
     log_file="${log_dir}/${script_name}-${action}-${dataset}-${experiment}-full_logs.txt"
@@ -71,5 +71,5 @@ elif [[ $action == 'readable_neg' ]]; then
     wc -l "$splits_path"/*-neg.json | tee -a ${log_file}
     # Get rid of the shuffled files.
     rm -r "$neg_data_path"
-    echo "Removed: $neg_data_path/*.json"
+    echo "Removed: $neg_data_path/*"
 fi
