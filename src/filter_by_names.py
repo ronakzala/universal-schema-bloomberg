@@ -41,8 +41,12 @@ def match_article_to_politician(fname):
 	'''
 	fname = fname.strip()
 	full_path = os.path.join(dir_path, fname)
-	comm = rcff(full_path)
 	filtered_dictionary = {}
+	try:
+		comm = rcff(full_path)
+	except:
+		return filtered_dictionary
+
 	count = 0
 
 	for (uuid, tokenization_object) in comm.tokenizationForUUID.items():
