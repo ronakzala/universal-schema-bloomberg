@@ -4,6 +4,7 @@ import concrete.util
 import shutil
 import sys
 import multiprocessing as mp
+import json
 from concrete.util.tokenization import get_ner, get_tagged_tokens, get_token_taggings, get_tokens
 
 dir_path = "/mnt/nfs/work1/mccallum/smysore/data/concretely_annotated_nyt/data/comms"
@@ -97,6 +98,9 @@ def get_filtered_files():
 	process_pool.join()
 	names.close()
 	print(filtered_articles)
+	with open("../data/anyt/politicians_filtered_articles.json", 'w') as f:
+		json.dump(filtered_articles, f, indent=4)
+
 
 set_politicians = get_politicians_set()
 get_filtered_files()
