@@ -6,20 +6,36 @@ import numpy as np
 import torch
 import torch.nn as nn
 
+import time
+
 parser = argparse.ArgumentParser()
 parser.add_argument('--datafile', default='', help='data file')
 parser.add_argument('--classifier', default='nb', help='classifier to use')
 parser.add_argument('--eta', default='0.0001', help='learning rate')
 parser.add_argument('--nepochs', default='20', help='number of epochs')
 parser.add_argument('--dp', default='10', help='dp size')
+parser.add_argument('--modelpath', default='', help='model path')
 
 
 class BillModel(nn.Module):
-	def __init__(self, num_words, word_embed_len, embedding_matrix, num_cp, dp_size):
+	def __init__(self, embedding_matrix, model_params):
 		super(BillModel,self).__init__()
-		self.embedding1 = nn.Embedding(num_words, word_embed_len, _weight=embedding_matrix)
-		self.linear1 = nn.Linear(word_embed_len, dp_size)
-		self.embedding2 = nn.Embedding(num_cp, dp_size)
+		# Initialize bill word embeddings with the corresponding glove embeddings
+		self.embedding1 = nn.Embedding(
+			model_params["num_words"], 
+			model_params["word_embed_len"],
+			_weight=embedding_matrix
+		)
+		# Linear layer to transform from bill space to politician space
+		self.linear1 = nn.Linear(
+			model_params["word_embed_len"],
+			model_params["dp_size"]
+		)
+		# Embedding layer for congresspersons
+		self.embedding2 = nn.Embedding(
+			model_params["num_cp"],
+			model_params["dp_size"]
+		)
 		self.sigmoid = nn.Sigmoid()
 		nn.init.uniform_(self.linear1.weight, -0.01, 0.01)
 		nn.init.uniform_(self.embedding2.weight, -0.01, 0.01)
@@ -32,8 +48,6 @@ class BillModel(nn.Module):
 		x1 = x[1].long()
 		y2 = self.embedding2(x1)
 		y2 = y2.view(y2.size(1))
-		#print(y1.shape)
-		#print(y2.shape)
 		y = torch.dot(y1, y2)
 		y = self.sigmoid(y)
 		return y
@@ -46,52 +60,76 @@ def main():
 	'''
 	opt = parser.parse_args()
 	data_file = h5py.File(opt.datafile, 'r')
-	n_epochs = int(opt.nepochs)
-	eta = float(opt.eta)
-	dp_size = int(opt.dp)
 
-	big_matrix_train_in = data_file['big_matrix_train_in']
-	big_matrix_train_out = data_file['big_matrix_train_out']
-	big_matrix_test_in = data_file['big_matrix_test_in']
-	big_matrix_test_out = data_file['big_matrix_test_out']
+	# IN matrices refer to bills, OUT matrices refer to politicians
+	big_matrix_train_bills = data_file['big_matrix_train_in']
+	big_matrix_train_cp = data_file['big_matrix_train_out']
+	big_matrix_test_bills = data_file['big_matrix_test_in']
+	big_matrix_test_cp = data_file['big_matrix_test_out']
 
 	embedding_matrix = data_file['embedding_matrix']
 	embedding_matrix = torch.tensor(embedding_matrix)
 	num_bills = data_file['num_bills'][0]
-	num_words = big_matrix_train_in[0].shape[1]
-	word_embed_len = 50
-	num_cp = data_file['num_cp'][0]
 
-	''' Models '''
+	model_params = {
+		"nepochs": int(opt.nepochs),
+		"eta": float(opt.eta),
+		"dp_size": int(opt.dp),
+		"num_words": big_matrix_train_bills[0].shape[1],
+		"word_embed_len": 50,
+		"num_cp": data_file['num_cp'][0]
+	}
+
 	print("Number of bills: ", num_bills)
-	print("Baseline accuracy: ", get_baseline(big_matrix_train_out[0], big_matrix_test_out[0]))
+	print("Baseline accuracy: ", get_baseline(big_matrix_train_cp[0], big_matrix_test_cp[0]))
 
-	#start_time = os.time()
+	# Use existing model, located at given path
+	if opt.modelpath != '':
+		if os.path.isfile(opt.modelpath):
+			model = torch.load(opt.modelpath)
+			model.eval()
+			evaluate_predictions(model, big_matrix_test_bills[0], big_matrix_test_cp[0], False)
+		else:
+			print("Error loading model from %s" % opt.modelpath)
+		return
+
 
 	''' Run model using cross-validation for replication purposes '''
 	if opt.classifier == 'nn_embed_m':
-		for i in range(big_matrix_train_in.shape[0]):
-			doc_term_matrix_train = big_matrix_train_in[i]
-			doc_term_matrix_test = big_matrix_test_in[i]
-			vote_matrix_train = big_matrix_train_out[i]
-			vote_matrix_test = big_matrix_test_out[i]
-			nn_model = train_nn_embed_m(doc_term_matrix_train, vote_matrix_train, doc_term_matrix_test, vote_matrix_test, False, dp_size, embedding_matrix, num_cp, num_words, word_embed_len, eta, n_epochs)
-			#print("Train time (seconds):", os.time() - start_time)
-			mod_test = make_sparse_list_input(doc_term_matrix_test)
-			accuracy = nn_get_acc_m(nn_model, mod_test, vote_matrix_test)
-			print("Test accuracy:", accuracy)
+		for i in range(big_matrix_train_bills.shape[0]):
+			doc_term_matrix_train = big_matrix_train_bills[i]
+			doc_term_matrix_test = big_matrix_test_bills[i]
+			vote_matrix_train = big_matrix_train_cp[i]
+			vote_matrix_test = big_matrix_test_cp[i]
+
+			nn_model = train_nn_embed_m(
+				doc_term_matrix_train,
+				vote_matrix_train,
+				doc_term_matrix_test,
+				vote_matrix_test,
+				False,
+				embedding_matrix,
+				model_params
+			)
+			evaluate_predictions(nn_model, doc_term_matrix_test, vote_matrix_test, False)
 
 	''' Run model without cross-validation for data generation purposes '''
 	if opt.classifier == 'nn_embed_m_nocv':
-		doc_term_matrix_train = big_matrix_train_in[0]
-		doc_term_matrix_test = big_matrix_test_in[0]
-		vote_matrix_train = big_matrix_train_out[0]
-		vote_matrix_test = big_matrix_test_out[0]
-		nn_model = train_nn_embed_m(doc_term_matrix_train, vote_matrix_train, doc_term_matrix_test, vote_matrix_test, True, dp_size, embedding_matrix, num_cp, num_words, word_embed_len, eta, n_epochs)
-		#print("Train time (seconds):", os.time() - start_time)
-		mod_test = make_sparse_list_input(doc_term_matrix_test)
-		accuracy = nn_get_acc_m(nn_model, mod_test, vote_matrix_test)
-		print("Test accuracy:", accuracy)
+		doc_term_matrix_train = big_matrix_train_bills[0]
+		doc_term_matrix_test = big_matrix_test_bills[0]
+		vote_matrix_train = big_matrix_train_cp[0]
+		vote_matrix_test = big_matrix_test_cp[0]
+		
+		nn_model = train_nn_embed_m(
+			doc_term_matrix_train,
+			vote_matrix_train,
+			doc_term_matrix_test,
+			vote_matrix_test,
+			True,
+			embedding_matrix,
+			model_params
+		)
+		evaluate_predictions(nn_model, doc_term_matrix_test, vote_matrix_test, False)
 
 
 def make_sparse_list_input(inp):
@@ -101,7 +139,6 @@ def make_sparse_list_input(inp):
 	'''
 	retset = {}
 	for i in range(inp.shape[0]):
-		# Check this index, seemed unclear what this function did
 		vec_len = inp[i].sum(axis=0)
 		vec = torch.zeros(int(vec_len))
 		k = 0
@@ -114,7 +151,20 @@ def make_sparse_list_input(inp):
 	return retset
 
 
-def train_nn_embed_m(inp, out, doc_term_matrix_test, vote_matrix_test, nocv, dp_size, embedding_matrix, num_cp, num_words, word_embed_len, eta, nepochs):
+def evaluate_predictions(model, doc_term_matrix, vote_matrix, val=True):
+	mod_test = make_sparse_list_input(doc_term_matrix)
+	if val:
+		print("Start-of-epoch Stats:")
+
+	mod_test = make_sparse_list_input(doc_term_matrix)
+	acc_test = nn_get_acc_m(model, mod_test, vote_matrix)
+	print("Test accuracy: ", acc_test)
+	prec, recall = nn_get_prec_rec_m(model, mod_test, vote_matrix)
+	print ("Precision, Recall, F1:", prec, recall, 2 * prec * recall / (prec + recall))
+
+
+
+def train_nn_embed_m(doc_term_matrix_train, vote_matrix_train, doc_term_matrix_test, vote_matrix_test, nocv, embedding_matrix, model_params):
 	'''
 	Train Neural Network embedding
 	proc_bill:
@@ -132,30 +182,33 @@ def train_nn_embed_m(inp, out, doc_term_matrix_test, vote_matrix_test, nocv, dp_
 		-> Sigmoid brings it between [0, 1]
 
 	'''
-	model = BillModel(num_words, word_embed_len, embedding_matrix, num_cp, dp_size)
+	model = BillModel(embedding_matrix, model_params)
 	model = model.double()
 
 	nll = nn.BCELoss()
-	optimizer = torch.optim.SGD(model.parameters(), lr=eta)
+	optimizer = torch.optim.SGD(model.parameters(), lr=model_params["eta"])
 
-	inp = make_sparse_list_input(inp)
-	mod_test = make_sparse_list_input(doc_term_matrix_test)
+	doc_term_matrix_train = make_sparse_list_input(doc_term_matrix_train)
+	#mod_test = make_sparse_list_input(doc_term_matrix_test)
 
-	for ep in range(nepochs):
-		print("Epoch: ", ep)
-		acc_train = nn_get_acc_m(model, inp, out)
+	for ep in range(model_params["nepochs"]):
+		print("Epoch: %d -------------------------" % ep)
+		acc_train = nn_get_acc_m(model, doc_term_matrix_train, vote_matrix_train)
+		evaluate_predictions(model, doc_term_matrix_test, vote_matrix_test)
+		'''
 		print("Start-of-epoch train accuracy: ", acc_train)
 		acc_test = nn_get_acc_m(model, mod_test, vote_matrix_test)
 		print("Start-of-epoch test accuracy: ", acc_test)
 		prec, recall = nn_get_prec_rec_m(model, mod_test, vote_matrix_test)
 		print ("Precision, Recall, F1:", prec, recall, 2 * prec * recall / (prec + recall))
+		'''
 
-		for i in range(out.shape[0]):
-			for j in range(out.shape[1]):
+		for i in range(vote_matrix_train.shape[0]):
+			for j in range(vote_matrix_train.shape[1]):
 				if out[i][j] > 1:
-					X = inp[i]
+					X = doc_term_matrix_train[i]
 					c = torch.ones(1) * j
-					y = torch.ones(1) * (out[i][j] - 2)
+					y = torch.ones(1) * (vote_matrix_train[i][j] - 2)
 					y = y.double()
 					optimizer.zero_grad()
 					pred = model([X, c])
@@ -163,18 +216,8 @@ def train_nn_embed_m(inp, out, doc_term_matrix_test, vote_matrix_test, nocv, dp_
 					loss.backward()
 					optimizer.step()
 
-	if nocv:
-		with open("cp_weights.txt", "w") as text_file:
-			for i in range(proc_cp[0].weight.shape[0]):
-				for j in range(proc_cp[0].weight.shape[1]):
-					print(f"{proc_cp[1].weight[i][j]}", file=text_file, end=' ')
-				print("")
-		with open("bill_weights.txt", "w") as text_file:
-			bill_weights = np.matmul(proc_bill[0].weight, np.array(proc_bill[2].weight).transpose())
-			for i in range(bill_weights.shape[0]):
-				for j in range(bill_weights.shape[1]):
-					print(f"{bill_weights[i, j]}", file=text_file, end=' ')
-				print("")
+	model_path = time.strftime("%Y%m%d-%H-%M-%S") + ".pt"
+	torch.save(model, model_path)
 
 	return model
 
@@ -230,23 +273,10 @@ def get_baseline(out1, out2):
 	'''
 	-- Calculate baseline accuracy for a congress given test and training sets
 	'''
-	num_count = 0
-	denom_count = 0
-
-	for i in range(out1.shape[0]):
-		for j in range(out1.shape[1]):
-			if out1[i][j] > 1:
-				if out1[i][j] - 2 == 1:
-					num_count += 1
-				denom_count += 1
-
-	for i in range(out2.shape[0]):
-		for j in range(out2.shape[1]):
-			if out2[i][j] > 1:
-				if out2[i][j] - 2 == 1:
-					num_count += 1
-				denom_count += 1
+	denom_count = (out1 > 1).sum() + (out2 > 1).sum()
+	num_count = (out1 == 3).sum() + (out2 == 3).sum()
 
 	return num_count / denom_count
+
 
 main()
