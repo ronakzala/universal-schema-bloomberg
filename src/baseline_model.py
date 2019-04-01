@@ -189,19 +189,11 @@ def train_nn_embed_m(doc_term_matrix_train, vote_matrix_train, doc_term_matrix_t
 	optimizer = torch.optim.SGD(model.parameters(), lr=model_params["eta"])
 
 	doc_term_matrix_train = make_sparse_list_input(doc_term_matrix_train)
-	#mod_test = make_sparse_list_input(doc_term_matrix_test)
 
 	for ep in range(model_params["nepochs"]):
 		print("Epoch: %d -------------------------" % ep)
 		acc_train = nn_get_acc_m(model, doc_term_matrix_train, vote_matrix_train)
 		evaluate_predictions(model, doc_term_matrix_test, vote_matrix_test)
-		'''
-		print("Start-of-epoch train accuracy: ", acc_train)
-		acc_test = nn_get_acc_m(model, mod_test, vote_matrix_test)
-		print("Start-of-epoch test accuracy: ", acc_test)
-		prec, recall = nn_get_prec_rec_m(model, mod_test, vote_matrix_test)
-		print ("Precision, Recall, F1:", prec, recall, 2 * prec * recall / (prec + recall))
-		'''
 
 		for i in range(vote_matrix_train.shape[0]):
 			for j in range(vote_matrix_train.shape[1]):
