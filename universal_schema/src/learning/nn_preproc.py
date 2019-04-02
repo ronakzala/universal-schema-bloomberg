@@ -32,43 +32,42 @@ def make_readable_neg(in_path, experiment_str, dataset):
         requires special treatment. Everything else is treated alike.
     :return: None.
     """
-    # splits = ['dev', 'test', 'train']
-    splits = ['sample']
+    splits = ['dev', 'test', 'train']
     for split in splits:
         # File containing per-line jsons for each positive example.
-        pos_split_fname = os.path.join(in_path, split)
+        pos_split_fname = os.path.join(in_path, split) + '.json'
         # File containing per-line jsons which have been shuffled but
         # are still all positive.
-        shuf_split_fname = os.path.join(in_path, split) + '-shuf'
+        shuf_split_fname = os.path.join(in_path, 'neg', split) + '-shuf.json'
         # File to write out.
         neg_split_fname = os.path.join(in_path, split) + '-neg.json'
 
         # Open everything up.
-        # pos_split_file = codecs.open(pos_split_fname, 'r', 'utf-8')
-        # shuf_split_file = codecs.open(shuf_split_fname, 'r', 'utf-8')
+        pos_split_file = codecs.open(pos_split_fname, 'r', 'utf-8')
+        shuf_split_file = codecs.open(shuf_split_fname, 'r', 'utf-8')
         # In the case of train-neg files for the anyt data and rnentvs model
         # the train-neg file should be appended to instead of being written to
         # from scratch.
-        # neg_split_file = codecs.open(neg_split_fname, 'w', 'utf-8')
-
+        neg_split_file = codecs.open(neg_split_fname, 'w', 'utf-8')
         start_time = time.time()
-        pos_split_file = open(in_path + "freebase.sample")
-        shuf_split_file = open(in_path + "freebase.sample" + "-shuffled")
-        neg_split_file = open(in_path + "freebase.sample" + "-neg", 'x')
-
         sys.stdout.write('Processing: {:s}\n'.format(pos_split_file.name))
         example_count = 0
-        for pos_doc, shuf_doc in zip(pos_split_file, shuf_split_file):
-            pos_doc = pos_doc.split()
-            shuf_doc = shuf_doc.split()
-
+        for pos_json, shuf_json in itertools.izip(data_utils.read_json(pos_split_file),
+                                                  data_utils.read_json(shuf_split_file)):
             # Same as the pos row.
-            pos_doc_id = pos_doc[0]
-            pos_row = pos_doc[1]
-            neg_col = shuf_doc[2]
-
-            im_data = "{} {} {}".format(pos_doc_id, pos_row, neg_col)
-            neg_split_file.write(im_data + '\n')
+            pos_doc_id = pos_json['doc_id']
+            pos_row = pos_json['row']
+            neg_col = shuf_json['col']
+            if experiment_str in ['latfeatus']:
+                # TODO: Write into the format of files that you choose to use.
+                # Write the example out to a file.
+                im_data = {
+                    'row': pos_row,
+                    'col': neg_col,
+                    'doc_id': pos_doc_id
+                }
+            jsons = json.dumps(im_data)
+            neg_split_file.write(jsons + '\n')
             example_count += 1
             if example_count % 10000 == 0:
                 sys.stdout.write('Processing example: {:d}\n'.format(example_count))
@@ -77,7 +76,7 @@ def make_readable_neg(in_path, experiment_str, dataset):
         sys.stdout.write('Took: {:4.4f}s\n\n'.format(time.time() - start_time))
 
 
-def map_split_to_int(split_file, intmapped_out_file, rel2idx, ent2idx, size_str,
+def map_split_to_int(split_file, intmapped_out_file, op2idx, ent2idx, size_str,
                      experiment_str, update_map=True):
     """
     Convert text to set of int mapped tokens. Mapping words to integers at
@@ -86,7 +85,7 @@ def map_split_to_int(split_file, intmapped_out_file, rel2idx, ent2idx, size_str,
     :param intmapped_out_file: file; the file to write int-mapped per
         line jsons for each example to.
     :param ent2idx: dict; mapping ents/col elements to integers.
-    :param rel2idx: dict; mapping ops/rows to integers.
+    :param op2idx: dict; mapping ops/rows to integers.
     :param size_str: string [small/full]; says if you want to make a
         small example set or full.
     :param experiment_str: string; says which experiment you're making the intmaps
@@ -95,34 +94,30 @@ def map_split_to_int(split_file, intmapped_out_file, rel2idx, ent2idx, size_str,
         sharing of embeddings between different splits.
     :return: word2idx: dict(str:int); maps every token to an integer.
     """
-    entities, relations = set(), set()
+    row_oovs, col_oovs = set(), set()
     split_docs = defaultdict(int)
     num_examples = 0
     # reserve some indices for special tokens.
-    ent2idx['<pad>'], rel2idx['<pad>'] = les.PAD, les.PAD
-    ent2idx['<oov>'], rel2idx['<oov>'] = les.OOV, les.OOV
-    ent2idx['<start>'], rel2idx['<start>'] = les.START, les.START
-    ent2idx['<stop>'], rel2idx['<stop>'] = les.STOP, les.STOP
+    ent2idx['<pad>'], op2idx['<pad>'] = les.PAD, les.PAD
+    ent2idx['<oov>'], op2idx['<oov>'] = les.OOV, les.OOV
+    ent2idx['<start>'], op2idx['<start>'] = les.START, les.START
+    ent2idx['<stop>'], op2idx['<stop>'] = les.STOP, les.STOP
 
     start_time = time.time()
     sys.stdout.write('Processing: {:s}\n'.format(split_file.name))
-    for line in split_file:
+    for example_json in data_utils.read_json(split_file):
         # Read the list 'things' in the row, mostly a single operation;
         # But it could be a list of (possibly multi-word) entities.
         # Depending on the experiment.
-        # example_row = example_json['row']
+        example_row = example_json['row']
         # Read the column which has the types/type+ents/skeletons.
-        # example_col = example_json['col']
+        example_col = example_json['col']
         # Keep track of the doc id to help look at look at the original text.
-        # doc_id = example_json['doc_id']
+        doc_id = example_json['doc_id']
         # Some of the dois have underscores in them even aside from the one I
         # inserted in the end. So rebuild the correct doi.
-        line = line.split()
-        entity1 = line[0]
-        entity2 = line[1]
-        relation = line[2]
-        # doi_str = '_'.join(doc_id.split('_')[:-1])
-        # split_docs[doi_str] += 1  # Keep track of the number of documents.
+        doi_str = '_'.join(doc_id.split('_')[:-1])
+        split_docs[doi_str] += 1  # Keep track of the number of documents.
         num_examples += 1
         if num_examples % 10000 == 0:
             sys.stdout.write('Processing the {:d}th example\n'.format(num_examples))
@@ -131,34 +126,42 @@ def map_split_to_int(split_file, intmapped_out_file, rel2idx, ent2idx, size_str,
             break
         # Update the token-to-int map.
         if update_map:
-            if entity1 not in ent2idx:
-                ent2idx[entity1] = len(ent2idx)
-            if entity2 not in ent2idx:
-                ent2idx[entity2] = len(ent2idx)
-            if relation not in rel2idx:
-                rel2idx[relation] = len(rel2idx)
-
-        # Map entities and relations to integers.
-        intmapped_entities = []
-        for row_tok in [entity1, entity2]:
+            for row_tok in example_row:
+                if row_tok not in op2idx:
+                    op2idx[row_tok] = len(op2idx)
+            for col_tok in example_col:
+                if col_tok not in ent2idx:
+                    ent2idx[col_tok] = len(ent2idx)
+        # Map row and columns to integers.
+        intmapped_row = []
+        for row_tok in example_row:
             # This case cant happen for me because im updating the map
             # for every split. But in case I set update_map to false
             # this handles it.
-            intmapped_tok = ent2idx.get(row_tok, ent2idx['<oov>'])
-            intmapped_entities.append(intmapped_tok)
+            intmapped_tok = op2idx.get(row_tok, op2idx['<oov>'])
+            intmapped_row.append(intmapped_tok)
+            if intmapped_tok == op2idx['<oov>']:
+                row_oovs.add(row_tok)
+        intmapped_col = []
+        for col_tok in example_col:
+            intmapped_tok = ent2idx.get(col_tok, ent2idx['<oov>'])
+            intmapped_col.append(intmapped_tok)
             if intmapped_tok == ent2idx['<oov>']:
-                relations.add(row_tok)
-
-        intmapped_relations = []
-        intmapped_tok = rel2idx.get(relation, rel2idx['<oov>'])
-        intmapped_relations.append(intmapped_tok)
-        if intmapped_tok == rel2idx['<oov>']:
-            relations.add(relation)
-
+                col_oovs.add(col_tok)
         # Write the example out to a file.
-
-        im_data = "{} {} {}".format(intmapped_entities[0], intmapped_entities[1], intmapped_relations[0])
-        intmapped_out_file.write(im_data+'\n')
+        if experiment_str in ['latfeatus']:
+            # TODO: Write into the format of files that you choose to use.
+            row_id = example_json['row_id']
+            col_ids = row_id + example_json['col_ids'] + row_id
+            im_data = {
+                'row': intmapped_row,
+                'row_id': row_id,
+                'col': intmapped_col,
+                'col_ids': col_ids,
+                'doc_id': doc_id
+            }
+        jsons = json.dumps(im_data)
+        intmapped_out_file.write(jsons+'\n')
 
     intmapped_out_file.close()
     av_seq_len = float(sum(split_docs.values()))/len(split_docs)
@@ -166,10 +169,10 @@ def map_split_to_int(split_file, intmapped_out_file, rel2idx, ent2idx, size_str,
                      format(len(split_docs), num_examples, av_seq_len))
     sys.stdout.write('total_rc-vocab_size: {:d}; row_vocab_size: {:d}; col_vocab_size: {:d} '
                      'num_row_oovs: {:d}; num_col_oovs: {:d}\n'.
-                     format(len(rel2idx) + len(ent2idx), len(rel2idx), len(ent2idx),
-                            len(entities), len(relations)))
+                     format(len(op2idx)+len(ent2idx), len(op2idx), len(ent2idx),
+                            len(row_oovs), len(col_oovs)))
     sys.stdout.write('Took: {:4.4f}s\n'.format(time.time()-start_time))
-    return rel2idx, ent2idx
+    return op2idx, ent2idx
 
 
 def make_int_maps(in_path, out_path, experiment_str, size_str, dataset):
@@ -189,19 +192,19 @@ def make_int_maps(in_path, out_path, experiment_str, size_str, dataset):
     # converted to ints earlier have to be converted to ints after the whole
     # other set of files.
     try:
-        intmap_path = os.path.join(out_path, 'ent2idx-{:s}'.format(size_str))
+        intmap_path = os.path.join(out_path, 'op2idx-{:s}.json'.format(size_str))
+        with codecs.open(intmap_path, 'r', 'utf-8') as fp:
+            op2idx = json.load(fp)
+            sys.stdout.write('Read: {:s}\n'.format(fp.name))
+    except IOError:
+        op2idx = {}
+    try:
+        intmap_path = os.path.join(out_path, 'ent2idx-{:s}.json'.format(size_str))
         with codecs.open(intmap_path, 'r', 'utf-8') as fp:
             ent2idx = json.load(fp)
             sys.stdout.write('Read: {:s}\n'.format(fp.name))
     except IOError:
         ent2idx = {}
-    try:
-        intmap_path = os.path.join(out_path, 'rel2idx-{:s}.json'.format(size_str))
-        with codecs.open(intmap_path, 'r', 'utf-8') as fp:
-            rel2idx = json.load(fp)
-            sys.stdout.write('Read: {:s}\n'.format(fp.name))
-    except IOError:
-        rel2idx = {}
     # Just list all files to map to ints and map what ever is present.
     if dataset == 'freebase':
         if experiment_str in ['latfeatus']:
@@ -212,27 +215,27 @@ def make_int_maps(in_path, out_path, experiment_str, size_str, dataset):
     # Manually setting this to false when I want to update only specific splits.
     update_map = True
     for split in splits:
-        # split_fname = os.path.join(in_path, split)
+        split_fname = os.path.join(in_path, split) + '.json'
         # Try to open the split file, if it doesnt exist move to the next split.
-        split_file = open(in_path)
+        split_file = codecs.open(split_fname, 'r', 'utf-8')
         intmapped_out_fname = os.path.join(out_path, split) + '-im-{:s}.json'.format(size_str)
         intmapped_out_file = codecs.open(intmapped_out_fname, 'w', 'utf-8')
         # Choose to use a different int mapping function for based on the experiment.
-        ent2idx, rel2idx = map_split_to_int(
-                split_file, intmapped_out_file,  rel2idx=rel2idx, ent2idx=ent2idx,
+        op2idx, ent2idx = map_split_to_int(
+                split_file, intmapped_out_file,  op2idx=op2idx, ent2idx=ent2idx,
                 experiment_str=experiment_str, size_str=size_str, update_map=update_map)
         sys.stdout.write('Wrote: {:s}\n'.format(intmapped_out_fname))
         sys.stdout.write('\n')
     if update_map:
         # Write the maps.
+        intmap_out_path = os.path.join(out_path, 'op2idx-{:s}.json'.format(size_str))
+        with codecs.open(intmap_out_path, 'w', 'utf-8') as fp:
+            json.dump(op2idx, fp, indent=2)
+        sys.stdout.write('Wrote: {:s}\n'.format(intmap_out_path))
+
         intmap_out_path = os.path.join(out_path, 'ent2idx-{:s}.json'.format(size_str))
         with codecs.open(intmap_out_path, 'w', 'utf-8') as fp:
             json.dump(ent2idx, fp, indent=2)
-        sys.stdout.write('Wrote: {:s}\n'.format(intmap_out_path))
-
-        intmap_out_path = os.path.join(out_path, 'rel2idx-{:s}.json'.format(size_str))
-        with codecs.open(intmap_out_path, 'w', 'utf-8') as fp:
-            json.dump(rel2idx, fp, indent=2)
         sys.stdout.write('Wrote: {:s}\n'.format(intmap_out_path))
 
 
