@@ -137,7 +137,7 @@ eval_info["106"]["no_data"] = [
 	"JeffersonSessions Republican",
 	"JosephBiden Democrat",
 	"HarryReid Democrat",
-	"HillaryClinton Democrat",
+	"CharlesSchumer Democrat",
 	"SusanCollins Republican",
 	"MitchMcConnell Republican",
 	"NancyPelosi Democrat",
