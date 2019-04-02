@@ -3,7 +3,9 @@ import os
 import concrete.util
 import shutil
 import sys
-import multiprocessing
+import multiprocessing as mp
+import json
+from concrete.util.tokenization import get_ner, get_tagged_tokens, get_token_taggings, get_tokens
 
 dir_path = "/mnt/nfs/work1/mccallum/smysore/data/concretely_annotated_nyt/data/comms"
 politicians_file_path = '../data/congressperson_data/unique_congress.txt'
@@ -20,16 +22,15 @@ def get_politicians_set():
 	with open(politicians_file_path, 'r') as filehandle:
 		filecontents = filehandle.readlines()
 		for line in filecontents:
-			set_politicians.add(line.rstrip())
-			print(line.rstrip())
-			for name in line.split():
-				print(name)
-				set_politicians.add(name)
+			set_politicians.add(line.rstrip().lower())
+			#for name in line.split():
+				#print(name)
+				#set_politicians.add(name)
 
 	return set_politicians
 
 
-def match_article_to_politician(fname, set_politicians):
+def match_article_to_politician(fname):
 	'''
 	Per article function to return a mapping of politician to article
 	- Uses NER tags
@@ -40,48 +41,47 @@ def match_article_to_politician(fname, set_politicians):
 	'''
 	fname = fname.strip()
 	full_path = os.path.join(dir_path, fname)
-	comm = rcff(full_path)
 	filtered_dictionary = {}
+	try:
+		comm = rcff(full_path)
+	except:
+		return filtered_dictionary
+
 	count = 0
 
 	for (uuid, tokenization_object) in comm.tokenizationForUUID.items():
 		#iterating through tokenization objects for one comm file
-		print("Count : ", count + 1)
-	
-		#picking up the NER tagged token list
-		tagged_token_list_object = None
-		for tto in (tokenization_object.tokenTaggingList):
-			if(tto.taggingType == 'NER'):
-				tagged_token_list_object = tto.taggedTokenList
-				break
+		ner_list = get_ner(tokenization_object)
+		token_list = get_tokens(tokenization_object)
 
-		for idx in range(len(tokenization_object.tokenList)):
-			#iterating throught the token list to find all the 'PERSON' tags
-			token_object = tokenization_object.tokenList[idx]	
-			#token object
-			tagged_token_object = tagged_token_list_object[token_object.tokenIndex]
-			#tagged token Object from the NER tagged token List
+		idx = 0
+		while idx < len(token_list):
+			token_object = token_list[idx]
+			tagged_token_object = ner_list[token_object.tokenIndex]
 
-			if(tagged_token_object.tag == 'PERSON'):
-				person = ''
-				while(tagged_token_object.tag == 'PERSON'):
+			if tagged_token_object.tag == 'PERSON':
+				person = []
+				while tagged_token_object.tag == 'PERSON':
 					#if the cuurent token was a 'PERSON' add to person for all continuous 'PERSON' tags
-					person += token_object.text
+					person.append(token_object.text)
+					if idx >= len(token_list) - 1:
+						break
 					idx += 1
-					token_object = tokenization_object.tokenList[idx]
-					tagged_token_object = tagged_token_list_object[token_object.tokenIndex]
+					token_object = token_list[idx]
+					tagged_token_object = ner_list[token_object.tokenIndex]
 
+				person = ' '.join(person).lower()
 				if(person in set_politicians):
+					print("Matched %s" % person)
 					#check if this person is in the politician set, add to final dictionary if true
 					if(person in filtered_dictionary):
-						filtered_dictionary[person].append(filename) 
+						filtered_dictionary[person].append(fname) 
 					else:
-						#tempList = []
-						#tempList[0] = filename
-						filtered_dictionary[person] = [filename] 
-		count += 1
+						filtered_dictionary[person] = [fname] 
+			idx += 1
 
 		return filtered_dictionary
+
 
 
 def get_filtered_files():
@@ -93,18 +93,18 @@ def get_filtered_files():
 	'''
 	names = open("../data/anyt/anyt_filenames.txt", 'r')
 	process_pool = mp.Pool(processes=mp.cpu_count(), maxtasksperchild=10000)
-	poltician_set = get_politician_set()
-	filtered_articles = {politician: [] for politician in politician_set}
 
-	for politician_article_dicts in process_pool.imap_unordered(match_article_to_politician, names, politician_set, chunksize=mp.cpu_count()):
+	filtered_articles = {politician: [] for politician in set_politicians}
+	for politician_article_dicts in process_pool.imap_unordered(match_article_to_politician, names, chunksize=mp.cpu_count()):
 		for k, v in politician_article_dicts.items():
 			filtered_articles[k].extend(v)
 	process_pool.close()
 	process_pool.join()
 	names.close()
 	print(filtered_articles)
+	with open("../data/anyt/politicians_filtered_articles.json", 'w') as f:
+		json.dump(filtered_articles, f, indent=4)
 
 
+set_politicians = get_politicians_set()
 get_filtered_files()
-#TODO : store the dictionary
-#Combine this with filter by desk ???
