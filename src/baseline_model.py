@@ -8,6 +8,8 @@ import torch.nn as nn
 
 import time
 
+np.set_printoptions(threshold=np.nan)
+
 parser = argparse.ArgumentParser()
 parser.add_argument('--datafile', default='', help='data file')
 parser.add_argument('--classifier', default='nb', help='classifier to use')
@@ -61,11 +63,12 @@ def main():
 	opt = parser.parse_args()
 	data_file = h5py.File(opt.datafile, 'r')
 
-	# IN matrices refer to bills, OUT matrices refer to politicians
-	big_matrix_train_bills = data_file['big_matrix_train_in']
-	big_matrix_train_cp = data_file['big_matrix_train_out']
-	big_matrix_test_bills = data_file['big_matrix_test_in']
-	big_matrix_test_cp = data_file['big_matrix_test_out']
+	bill_matrix_train = data_file['bill_matrix_train']
+	bill_matrix_val = data_file['bill_matrix_val']
+	bill_matrix_test = data_file['bill_matrix_test']
+	vote_matrix_train = data_file['vote_matrix_train']
+	vote_matrix_val = data_file['vote_matrix_val']
+	vote_matrix_test = data_file['vote_matrix_test']
 
 	embedding_matrix = data_file['embedding_matrix']
 	embedding_matrix = torch.tensor(embedding_matrix)
@@ -75,61 +78,33 @@ def main():
 		"nepochs": int(opt.nepochs),
 		"eta": float(opt.eta),
 		"dp_size": int(opt.dp),
-		"num_words": big_matrix_train_bills[0].shape[1],
+		"num_words": bill_matrix_train.shape[1],
 		"word_embed_len": 50,
 		"num_cp": data_file['num_cp'][0]
 	}
 
 	print("Number of bills: ", num_bills)
-	print("Baseline accuracy: ", get_baseline(big_matrix_train_cp[0], big_matrix_test_cp[0]))
+	print("Baseline accuracy: ", get_baseline(np.array(vote_matrix_train), np.array(vote_matrix_val), np.array(vote_matrix_test)))
 
 	# Use existing model, located at given path
 	if opt.modelpath != '':
 		if os.path.isfile(opt.modelpath):
 			model = torch.load(opt.modelpath)
 			model.eval()
-			evaluate_predictions(model, big_matrix_test_bills[0], big_matrix_test_cp[0], False)
+			evaluate_predictions(model, bill_matrix_test, vote_matrix_test, False)
 		else:
 			print("Error loading model from %s" % opt.modelpath)
 		return
-
-
-	''' Run model using cross-validation for replication purposes '''
-	if opt.classifier == 'nn_embed_m':
-		for i in range(big_matrix_train_bills.shape[0]):
-			doc_term_matrix_train = big_matrix_train_bills[i]
-			doc_term_matrix_test = big_matrix_test_bills[i]
-			vote_matrix_train = big_matrix_train_cp[i]
-			vote_matrix_test = big_matrix_test_cp[i]
-
-			nn_model = train_nn_embed_m(
-				doc_term_matrix_train,
-				vote_matrix_train,
-				doc_term_matrix_test,
-				vote_matrix_test,
-				False,
-				embedding_matrix,
-				model_params
-			)
-			evaluate_predictions(nn_model, doc_term_matrix_test, vote_matrix_test, False)
-
-	''' Run model without cross-validation for data generation purposes '''
-	if opt.classifier == 'nn_embed_m_nocv':
-		doc_term_matrix_train = big_matrix_train_bills[0]
-		doc_term_matrix_test = big_matrix_test_bills[0]
-		vote_matrix_train = big_matrix_train_cp[0]
-		vote_matrix_test = big_matrix_test_cp[0]
-		
-		nn_model = train_nn_embed_m(
-			doc_term_matrix_train,
-			vote_matrix_train,
-			doc_term_matrix_test,
-			vote_matrix_test,
-			True,
-			embedding_matrix,
-			model_params
-		)
-		evaluate_predictions(nn_model, doc_term_matrix_test, vote_matrix_test, False)
+	
+	nn_model = train_nn_embed_m(
+		bill_matrix_train,
+		vote_matrix_train,
+		bill_matrix_val,
+		vote_matrix_val,
+		embedding_matrix,
+		model_params
+	)
+	evaluate_predictions(nn_model, bill_matrix_test, vote_matrix_test, False)
 
 
 def make_sparse_list_input(inp):
@@ -151,20 +126,18 @@ def make_sparse_list_input(inp):
 	return retset
 
 
-def evaluate_predictions(model, doc_term_matrix, vote_matrix, val=True):
-	mod_test = make_sparse_list_input(doc_term_matrix)
+def evaluate_predictions(model, bill_matrix, vote_matrix, val=True):
+	bill_matrix = make_sparse_list_input(bill_matrix)
+	predictions = get_predictions(model, vote_matrix, bill_matrix)
 	if val:
 		print("Start-of-epoch Stats:")
 
-	mod_test = make_sparse_list_input(doc_term_matrix)
-	acc_test = nn_get_acc_m(model, mod_test, vote_matrix)
-	print("Test accuracy: ", acc_test)
-	prec, recall = nn_get_prec_rec_m(model, mod_test, vote_matrix)
-	print ("Precision, Recall, F1:", prec, recall, 2 * prec * recall / (prec + recall))
+	accuracy, precision, recall, f1 = get_accuracy_stats(np.array(vote_matrix), predictions)
+	print("%s Accuracy: %.6f" % ("Val" if val else "Test", accuracy))
+	print ("Precision %.6f, Recall %.6f, F1 %.6f" % (precision, recall, f1))
 
 
-
-def train_nn_embed_m(doc_term_matrix_train, vote_matrix_train, doc_term_matrix_test, vote_matrix_test, nocv, embedding_matrix, model_params):
+def train_nn_embed_m(bill_matrix_train, vote_matrix_train, bill_matrix_test, vote_matrix_test, embedding_matrix, model_params):
 	'''
 	Train Neural Network embedding
 	proc_bill:
@@ -188,17 +161,17 @@ def train_nn_embed_m(doc_term_matrix_train, vote_matrix_train, doc_term_matrix_t
 	nll = nn.BCELoss()
 	optimizer = torch.optim.SGD(model.parameters(), lr=model_params["eta"])
 
-	doc_term_matrix_train = make_sparse_list_input(doc_term_matrix_train)
+	bill_matrix_train = make_sparse_list_input(bill_matrix_train)
 
 	for ep in range(model_params["nepochs"]):
 		print("Epoch: %d -------------------------" % ep)
-		acc_train = nn_get_acc_m(model, doc_term_matrix_train, vote_matrix_train)
-		evaluate_predictions(model, doc_term_matrix_test, vote_matrix_test)
+		acc_train = nn_get_acc_m(model, bill_matrix_train, vote_matrix_train)
+		evaluate_predictions(model, bill_matrix_test, vote_matrix_test)
 
 		for i in range(vote_matrix_train.shape[0]):
 			for j in range(vote_matrix_train.shape[1]):
-				if out[i][j] > 1:
-					X = doc_term_matrix_train[i]
+				if vote_matrix_train[i][j] > 1:
+					X = bill_matrix_train[i]
 					c = torch.ones(1) * j
 					y = torch.ones(1) * (vote_matrix_train[i][j] - 2)
 					y = y.double()
@@ -214,59 +187,45 @@ def train_nn_embed_m(doc_term_matrix_train, vote_matrix_train, doc_term_matrix_t
 	return model
 
 
-def nn_get_acc_m(model, inp, out):
-	'''
-	-- Get accuracy of model given model and test set
-	'''
-	num_count = 0.0
-	denom_count = 0.0
-	for i in range(out.shape[0]):
-		for j in range(out.shape[1]):
-
-			if out[i][j] > 1:
-				X = inp[i]
+def get_predictions(model, vote_matrix, bill_matrix):
+	predictions = np.zeros_like(vote_matrix)
+	for i in range(vote_matrix.shape[0]):
+		for j in range(vote_matrix.shape[1]):
+			if vote_matrix[i][j] > 1:
+				X = bill_matrix[i]
 				c = torch.ones(1) * j
-				y = torch.ones(1) * (out[i][j] - 2)
 				pred = model([X, c])
-				pred = 1 if pred.item() >= 0.5 else 0
-				if pred == y[0]:
-					num_count += 1
-				denom_count += 1
+				predictions[i, j] = 3 if pred.item() >= 0.5 else 2
 
-	return num_count / denom_count
+	return predictions
 
 
-def nn_get_prec_rec_m(model, inp, out):
+def get_accuracy_stats(vote_matrix, predictions):
 	'''
-	-- Get precision and recall of model given model and test set
+	Return accuracy, precision, recall, F1
 	'''
-	true_positives = 0.0
-	positives = 0.0
-	trues = 0.0
-	for i in range(out.shape[0]):
-		for j in range(out.shape[1]):
-			if out[i][j] > 1:
-				X = inp[i]
-				c = torch.ones(1) * j
-				y = torch.ones(1) * (out[i][j] - 2)
-				pred = model([X, c])
-				pred = 1 if pred.item() >= 0.5 else 0
-				if (y[0] == 0 and pred == 0):
-					true_positives += 1
-				if y[0] == 0:
-					trues += 1 
-				if pred == 0:
-					positives += 1 
+	predictions[predictions == 1] = 0
+	vote_matrix[vote_matrix == 1] = 0
 
-	return true_positives / positives, true_positives / trues
+	true_positives_count = ((vote_matrix + predictions) == 6).sum()
+	false_positives_count = ((vote_matrix - predictions) == -1).sum()
+	false_negatives_count = ((vote_matrix - predictions) == 1).sum()
+	true_negatives_count = ((vote_matrix + predictions) == 4).sum()
+	
+	accuracy = (true_positives_count + true_negatives_count) / (true_positives_count + true_negatives_count + false_positives_count + false_negatives_count)
+	precision = true_positives_count / (true_positives_count + false_positives_count)
+	recall = true_positives_count / (true_positives_count + false_negatives_count)
+	f1 = 2.0 * precision * recall / (precision + recall)
+	
+	return accuracy, precision, recall, f1
 
 
-def get_baseline(out1, out2):
+def get_baseline(vote_matrix_train, vote_matrix_val, vote_matrix_test):
 	'''
 	-- Calculate baseline accuracy for a congress given test and training sets
 	'''
-	denom_count = (out1 > 1).sum() + (out2 > 1).sum()
-	num_count = (out1 == 3).sum() + (out2 == 3).sum()
+	denom_count = (vote_matrix_train > 1).sum() + (vote_matrix_val > 1).sum() + (vote_matrix_test > 1).sum()
+	num_count = (vote_matrix_train == 3).sum() + (vote_matrix_val == 3).sum() + (vote_matrix_test == 3).sum()
 
 	return num_count / denom_count
 
