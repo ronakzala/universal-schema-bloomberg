@@ -277,7 +277,7 @@ def main(arguments):
     num_bills = len(bill_dict)
     num_cp = len(congressperson_dict)
 
-    word_dict = gen_word_dict(data, bill_dict, congress_num)
+    word_dict = gen_word_dict(data, bill_dict, congress)
     doc_term_matrix = gen_doc_term_matrix(data, bill_dict, word_dict, congress)
     print(doc_term_matrix.shape)
     embedding_matrix = parse_embeddings("../data/glove.6B.50d.txt.gz", word_dict)
