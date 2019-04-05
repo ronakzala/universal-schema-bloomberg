@@ -87,10 +87,13 @@ The following tries to describe what the different parts of the repo are for wit
 
 
 ### General workflow:
-This expects a directory structure as defined above. This top level directory is your working directory and you should set `CUR_PROJ_DIR` to the top level directory.
+This expects a directory structure as defined above. This top level directory is your working directory and you should set `CUR_PROJ_DIR` to the top level directory. This should be pointing to universal_schema.
 
-1. `export CUR_PROJ_DIR="/iesl/canvas/smysore/material_science_framex"`
-1. Create a set of relation and entity pair triples in a suitable format.
+1. `export CUR_PROJ_DIR="/iesl/canvas/smysore/material_science_framex"` # This is just an example
+1. Create a set of relation and entity pair triples in a suitable format(dev.txt, train.txt, test.txt).
+1. Conver the creates set of relation and entity pair to json compatible format(dev.json, train.json, test.json) 
+
+        ./bin/learning/run_convert2json.sh 
 1. Create readable negative examples that you need for training the US model (here, `latfeatus` on the `freebase` data):
 
         ./bin/learning/run_nn_preproc.sh -a readable_neg -e latfeatus -d freebase
