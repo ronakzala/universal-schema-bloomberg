@@ -116,7 +116,7 @@ def map_split_to_int(split_file, intmapped_out_file, op2idx, ent2idx, size_str,
         doc_id = example_json['doc_id']
         # Some of the dois have underscores in them even aside from the one I
         # inserted in the end. So rebuild the correct doi.
-        doi_str = '_'.join(doc_id.split('_')[:-1])
+        doi_str = '_'.join(str(doc_id).split('_')[:-1]) # TODO: Check it again if it required
         split_docs[doi_str] += 1  # Keep track of the number of documents.
         num_examples += 1
         if num_examples % 10000 == 0:
@@ -151,8 +151,8 @@ def map_split_to_int(split_file, intmapped_out_file, op2idx, ent2idx, size_str,
         # Write the example out to a file.
         if experiment_str in ['latfeatus']:
             # TODO: Write into the format of files that you choose to use.
-            row_id = example_json['row_id']
-            col_ids = row_id + example_json['col_ids'] + row_id
+            row_id = example_json['doc_id']  # TODO: Check on the data that Sheshera already had, what was row_id?
+            col_ids = row_id + example_json['doc_id'] + row_id  # TODO: Same as above
             im_data = {
                 'row': intmapped_row,
                 'row_id': row_id,

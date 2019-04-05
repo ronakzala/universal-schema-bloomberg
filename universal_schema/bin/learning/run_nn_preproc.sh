@@ -24,13 +24,12 @@ if [[ "$action" == '' ]] || [[ "$dataset" == '' ]] || [[ "$experiment" == '' ]];
 fi
 
 # $CUR_PROJ_DIR is a environment variable; manually set outside the script.
+#CUR_PROJ_DIR="/Users/ronakzala/696ds/universal-schema-bloomberg/universal_schema"
 log_dir="$CUR_PROJ_DIR/logs/learning"
 mkdir -p $log_dir
 
 splits_path="$CUR_PROJ_DIR/datasets_proc/${dataset}/${experiment}"
-
-script_name="nn_preproc"
-source_path="$CUR_PROJ_DIR/experiments/src/learning"
+source_path="$CUR_PROJ_DIR/src/learning"
 
 if [[ $action == 'int_map' ]]; then
     log_file="${log_dir}/${script_name}-${action}-${dataset}-${experiment}-full_logs.txt"
@@ -49,11 +48,11 @@ elif [[ $action == 'readable_neg' ]]; then
     test_file="$splits_path/test.json"
     neg_data_path="$splits_path/neg"
     mkdir -p "$neg_data_path"
-    shuf "$train_file" > "$neg_data_path/train-shuf.json"
+    gshuf "$train_file" > "$neg_data_path/train-shuf.json"
     echo "Created: $neg_data_path/train-shuf.json"
-    shuf "$dev_file" > "$neg_data_path/dev-shuf.json"
+    gshuf "$dev_file" > "$neg_data_path/dev-shuf.json"
     echo "Created: $neg_data_path/dev-shuf.json"
-    shuf "$test_file" > "$neg_data_path/test-shuf.json"
+    gshuf "$test_file" > "$neg_data_path/test-shuf.json"
     echo "Created: $neg_data_path/test-shuf.json"
 
     # Create readable negs.

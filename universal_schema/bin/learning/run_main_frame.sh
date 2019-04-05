@@ -48,7 +48,8 @@ get_seeded_random()
 }
 
 # Source hyperparameters from a config file.
-hparam_config="$CUR_PROJ_DIR/experiments/config/models_config/${dataset}/${experiment}-fixed.conf"
+#CUR_PROJ_DIR="/Users/ronakzala/696ds/universal-schema-bloomberg/universal_schema"
+hparam_config="$CUR_PROJ_DIR/config/models_config/${dataset}/${experiment}-fixed.conf"
 source "$hparam_config"
 
 run_time=`date '+%Y_%m_%d-%H_%M_%S'`
@@ -84,7 +85,7 @@ if [[ $action == 'train_model' ]]; then
 fi
 
 script_name="main_frame"
-source_path="$CUR_PROJ_DIR/experiments/src/learning"
+source_path="$CUR_PROJ_DIR/src/learning"
 
 # Train the model.
 if [[ $action == 'train_model' ]]; then
@@ -102,9 +103,9 @@ if [[ $action == 'train_model' ]]; then
             --bsize $bsize --epochs $epochs --lr $lr\
             --decay_by $decay_by --decay_every $decay_every --es_check_every $es_check_every\
             --use_toy $use_toy"
-    # Additional args needed by each model.
+    # Additional args needed by each model. # TODO: What is this used for?(rdim)
     if [[ $experiment == 'latfeatus' ]]; then
-        --rdim $rdim --dropp $dropp --argdim $argdim
+        cmd="$cmd --rdim $rdim --dropp $dropp --argdim $argdim --lstm_comp $lstm_comp"
     fi
     eval $cmd 2>&1 | tee -a ${log_file}
 elif [[ $action == 'run_saved' ]]; then
