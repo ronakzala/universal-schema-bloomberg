@@ -2,6 +2,7 @@ import h5py
 import argparse
 import os
 import numpy as np
+import json
 
 import torch
 import torch.nn as nn
@@ -73,6 +74,7 @@ def main():
 	embedding_matrix = data_file['embedding_matrix']
 	embedding_matrix = torch.tensor(embedding_matrix)
 	num_bills = data_file['num_bills'][0]
+	congress = opt.datafile.split('/')[-1].split('.')[0]
 
 	model_params = {
 		"nepochs": int(opt.nepochs),
@@ -80,7 +82,8 @@ def main():
 		"dp_size": int(opt.dp),
 		"num_words": bill_matrix_train.shape[1],
 		"word_embed_len": 50,
-		"num_cp": data_file['num_cp'][0]
+		"num_cp": data_file['num_cp'][0],
+		"congress": congress
 	}
 
 	print("Number of bills: ", num_bills)
@@ -91,11 +94,11 @@ def main():
 		if os.path.isfile(opt.modelpath):
 			model = torch.load(opt.modelpath)
 			model.eval()
-			evaluate_predictions(model, bill_matrix_test, vote_matrix_test, False)
+			evaluate_predictions(model, bill_matrix_test, vote_matrix_test, False, congress)
 		else:
 			print("Error loading model from %s" % opt.modelpath)
 		return
-	
+
 	nn_model = train_nn_embed_m(
 		bill_matrix_train,
 		vote_matrix_train,
@@ -104,7 +107,7 @@ def main():
 		embedding_matrix,
 		model_params
 	)
-	evaluate_predictions(nn_model, bill_matrix_test, vote_matrix_test, False)
+	evaluate_predictions(nn_model, bill_matrix_test, vote_matrix_test, False, congress)
 
 
 def make_sparse_list_input(inp):
@@ -126,15 +129,40 @@ def make_sparse_list_input(inp):
 	return retset
 
 
-def evaluate_predictions(model, bill_matrix, vote_matrix, val=True):
+def evaluate_predictions(model, bill_matrix, vote_matrix, val=True, congress='106'):
 	bill_matrix = make_sparse_list_input(bill_matrix)
 	predictions = get_predictions(model, vote_matrix, bill_matrix)
 	if val:
 		print("Start-of-epoch Stats:")
 
+	'''
 	accuracy, precision, recall, f1 = get_accuracy_stats(np.array(vote_matrix), predictions)
 	print("%s Accuracy: %.6f" % ("Val" if val else "Test", accuracy))
 	print ("Precision %.6f, Recall %.6f, F1 %.6f" % (precision, recall, f1))
+	'''
+
+	with open("../data/preprocessing_metadata/eval_info.json", 'r') as infile:
+		eval_set = json.load(infile)
+	with open("../data/preprocessing_metadata/cp_info_%s.txt" % congress, 'r') as cp_file:
+		cp_info = cp_file.readlines()
+
+	cp_info = [x.strip() for x in cp_info]
+	set_no_data = set()
+	for cp_name in eval_set[congress]["no_data"]:
+		idx = cp_info.index(cp_name)#.encode('ascii', 'ignore'))
+		set_no_data.add(idx)
+	set_rest = set(range(vote_matrix.shape[1])) - set_no_data
+
+	print("Stats for No Data:")
+	accuracy, precision, recall, f1 = get_accuracy_stats(np.array(vote_matrix)[:, list(set_no_data)], predictions[:, list(set_no_data)])
+	print("%s Accuracy: %.6f" % ("Val" if val else "Test", accuracy))
+	print ("Precision %.6f, Recall %.6f, F1 %.6f" % (precision, recall, f1))
+
+	print("Stats for Full Data:")
+	accuracy, precision, recall, f1 = get_accuracy_stats(np.array(vote_matrix)[:, list(set_rest)], predictions[:, list(set_rest)])
+	print("%s Accuracy: %.6f" % ("Val" if val else "Test", accuracy))
+	print ("Precision %.6f, Recall %.6f, F1 %.6f" % (precision, recall, f1))
+
 
 
 def train_nn_embed_m(bill_matrix_train, vote_matrix_train, bill_matrix_test, vote_matrix_test, embedding_matrix, model_params):
@@ -166,7 +194,7 @@ def train_nn_embed_m(bill_matrix_train, vote_matrix_train, bill_matrix_test, vot
 	for ep in range(model_params["nepochs"]):
 		print("Epoch: %d -------------------------" % ep)
 		acc_train = nn_get_acc_m(model, bill_matrix_train, vote_matrix_train)
-		evaluate_predictions(model, bill_matrix_test, vote_matrix_test)
+		evaluate_predictions(model, bill_matrix_test, vote_matrix_test, model_params["congress"])
 
 		for i in range(vote_matrix_train.shape[0]):
 			for j in range(vote_matrix_train.shape[1]):
