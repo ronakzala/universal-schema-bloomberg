@@ -9,8 +9,6 @@ import torch.nn as nn
 
 import time
 
-np.set_printoptions(threshold=np.nan)
-
 parser = argparse.ArgumentParser()
 parser.add_argument('--datafile', default='', help='data file')
 parser.add_argument('--classifier', default='nb', help='classifier to use')
@@ -193,7 +191,6 @@ def train_nn_embed_m(bill_matrix_train, vote_matrix_train, bill_matrix_test, vot
 
 	for ep in range(model_params["nepochs"]):
 		print("Epoch: %d -------------------------" % ep)
-		acc_train = nn_get_acc_m(model, bill_matrix_train, vote_matrix_train)
 		evaluate_predictions(model, bill_matrix_test, vote_matrix_test, model_params["congress"])
 
 		for i in range(vote_matrix_train.shape[0]):
