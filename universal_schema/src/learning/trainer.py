@@ -175,12 +175,12 @@ class GenericTrainer:
                         best_params = copy.deepcopy(self.model.state_dict())
                         best_epoch = epoch
                         best_iter = iteration
-                        everything = (epoch, iteration, self.total_iters, dev_loss)
+                        everything = (epoch, iteration, self.total_iters, dev_loss.item())
                         if self.verbose:
                             logging.info('Current best model; Epoch {:d}; '
                                          'Iteration {:d}/{:d}; Dev loss: {:.4f}'.format(*everything))
                     else:
-                        everything = (epoch, iteration, self.total_iters, dev_loss)
+                        everything = (epoch, iteration, self.total_iters, dev_loss.item())
                         if self.verbose:
                             logging.info('Epoch {:d}; Iteration {:d}/{:d}; Dev loss: {:.4f}'.format(*everything))
                 iteration += 1
@@ -192,7 +192,7 @@ class GenericTrainer:
         # its just the final model state.
         if self.early_stop:
             logging.info('Best model; Epoch {:d}; Iteration {:d}; Dev loss: {:.4f}'
-                             .format(best_epoch, best_iter, best_dev_loss))
+                             .format(best_epoch, best_iter, best_dev_loss.item()))
             self.model.load_state_dict(best_params)
 
         # Say how long things took.
