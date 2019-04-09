@@ -85,6 +85,7 @@ def main():
 		"congress": congress
 	}
 
+	logging.basicConfig(filename='baseline_%s.log' % congress, filemode='w', level=logging.DEBUG)
 	logging.info("Number of bills: %d" % num_bills)
 	logging.info("Baseline accuracy: %f" % get_baseline(np.array(vote_matrix_train), np.array(vote_matrix_val), np.array(vote_matrix_test)))
 
