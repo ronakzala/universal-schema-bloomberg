@@ -3,6 +3,7 @@ import argparse
 import os
 import numpy as np
 import json
+import logging
 
 import torch
 import torch.nn as nn
@@ -84,8 +85,8 @@ def main():
 		"congress": congress
 	}
 
-	print("Number of bills: ", num_bills)
-	print("Baseline accuracy: ", get_baseline(np.array(vote_matrix_train), np.array(vote_matrix_val), np.array(vote_matrix_test)))
+	logging.info("Number of bills: %d" % num_bills)
+	logging.info("Baseline accuracy: %f" % get_baseline(np.array(vote_matrix_train), np.array(vote_matrix_val), np.array(vote_matrix_test)))
 
 	# Use existing model, located at given path
 	if opt.modelpath != '':
@@ -94,7 +95,7 @@ def main():
 			model.eval()
 			evaluate_predictions(model, bill_matrix_test, vote_matrix_test, False, congress)
 		else:
-			print("Error loading model from %s" % opt.modelpath)
+			logging.error("Error loading model from %s" % opt.modelpath)
 		return
 
 	nn_model = train_nn_embed_m(
@@ -131,13 +132,12 @@ def evaluate_predictions(model, bill_matrix, vote_matrix, val=True, congress='10
 	bill_matrix = make_sparse_list_input(bill_matrix)
 	predictions = get_predictions(model, vote_matrix, bill_matrix)
 	if val:
-		print("Start-of-epoch Stats:")
-
-	'''
-	accuracy, precision, recall, f1 = get_accuracy_stats(np.array(vote_matrix), predictions)
-	print("%s Accuracy: %.6f" % ("Val" if val else "Test", accuracy))
-	print ("Precision %.6f, Recall %.6f, F1 %.6f" % (precision, recall, f1))
-	'''
+		logging.info("Start-of-epoch Stats:")
+		accuracy, precision, recall, f1 = get_accuracy_stats(np.array(vote_matrix), predictions)
+		logging.info("%s Accuracy: %.6f" % ("Val" if val else "Test", accuracy))
+		logging.info("Precision %.6f, Recall %.6f, F1 %.6f" % (precision, recall, f1))
+		
+		return
 
 	with open("../data/preprocessing_metadata/eval_info.json", 'r') as infile:
 		eval_set = json.load(infile)
@@ -151,15 +151,15 @@ def evaluate_predictions(model, bill_matrix, vote_matrix, val=True, congress='10
 		set_no_data.add(idx)
 	set_rest = set(range(vote_matrix.shape[1])) - set_no_data
 
-	print("Stats for No Data:")
+	logging.info("Stats for No Data:")
 	accuracy, precision, recall, f1 = get_accuracy_stats(np.array(vote_matrix)[:, list(set_no_data)], predictions[:, list(set_no_data)])
-	print("%s Accuracy: %.6f" % ("Val" if val else "Test", accuracy))
-	print ("Precision %.6f, Recall %.6f, F1 %.6f" % (precision, recall, f1))
+	logging.info("%s Accuracy: %.6f" % ("Val" if val else "Test", accuracy))
+	logging.info("Precision %.6f, Recall %.6f, F1 %.6f" % (precision, recall, f1))
 
-	print("Stats for Full Data:")
+	logging.info("Stats for Full Data:")
 	accuracy, precision, recall, f1 = get_accuracy_stats(np.array(vote_matrix)[:, list(set_rest)], predictions[:, list(set_rest)])
-	print("%s Accuracy: %.6f" % ("Val" if val else "Test", accuracy))
-	print ("Precision %.6f, Recall %.6f, F1 %.6f" % (precision, recall, f1))
+	logging.info("%s Accuracy: %.6f" % ("Val" if val else "Test", accuracy))
+	logging.info("Precision %.6f, Recall %.6f, F1 %.6f" % (precision, recall, f1))
 
 
 
@@ -183,6 +183,9 @@ def train_nn_embed_m(bill_matrix_train, vote_matrix_train, bill_matrix_test, vot
 	'''
 	model = BillModel(embedding_matrix, model_params)
 	model = model.double()
+	logging.info("Using: %s" % "cuda" if torch.cuda.is_available() else "cpu")
+	device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+	model.to(device)
 
 	nll = nn.BCELoss()
 	optimizer = torch.optim.SGD(model.parameters(), lr=model_params["eta"])
@@ -190,8 +193,8 @@ def train_nn_embed_m(bill_matrix_train, vote_matrix_train, bill_matrix_test, vot
 	bill_matrix_train = make_sparse_list_input(bill_matrix_train)
 
 	for ep in range(model_params["nepochs"]):
-		print("Epoch: %d -------------------------" % ep)
-		evaluate_predictions(model, bill_matrix_test, vote_matrix_test, model_params["congress"])
+		logging.info("Epoch: %d -------------------------" % ep)
+		evaluate_predictions(model, bill_matrix_test, vote_matrix_test, True, model_params["congress"])
 
 		for i in range(vote_matrix_train.shape[0]):
 			for j in range(vote_matrix_train.shape[1]):
@@ -200,6 +203,9 @@ def train_nn_embed_m(bill_matrix_train, vote_matrix_train, bill_matrix_test, vot
 					c = torch.ones(1) * j
 					y = torch.ones(1) * (vote_matrix_train[i][j] - 2)
 					y = y.double()
+					X = X.to(device)
+					y = y.to(device)
+					c = c.to(device) 
 					optimizer.zero_grad()
 					pred = model([X, c])
 					loss = nll(pred, y)
@@ -208,17 +214,22 @@ def train_nn_embed_m(bill_matrix_train, vote_matrix_train, bill_matrix_test, vot
 
 	model_path = time.strftime("%Y%m%d-%H-%M-%S") + ".pt"
 	torch.save(model, model_path)
+	logging.info("Saved model to: %s" % model_path)
 
 	return model
 
 
 def get_predictions(model, vote_matrix, bill_matrix):
+	device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+	model.to(device)
 	predictions = np.zeros_like(vote_matrix)
 	for i in range(vote_matrix.shape[0]):
 		for j in range(vote_matrix.shape[1]):
 			if vote_matrix[i][j] > 1:
 				X = bill_matrix[i]
 				c = torch.ones(1) * j
+				X = X.to(device)
+				c = c.to(device)
 				pred = model([X, c])
 				predictions[i, j] = 3 if pred.item() >= 0.5 else 2
 
