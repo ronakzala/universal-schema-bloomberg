@@ -28,6 +28,7 @@ fi
 log_dir="$CUR_PROJ_DIR/logs/learning"
 mkdir -p $log_dir
 
+script_name="nn_preproc"
 splits_path="$CUR_PROJ_DIR/datasets_proc/${dataset}/${experiment}"
 source_path="$CUR_PROJ_DIR/src/learning"
 
