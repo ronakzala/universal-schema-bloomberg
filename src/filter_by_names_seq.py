@@ -9,10 +9,13 @@ import argparse
 from concrete.util.tokenization import get_ner, get_tagged_tokens, get_token_taggings, get_tokens
 import logging
 
-dir_path = "/mnt/nfs/work1/mccallum/smysore/data/concretely_annotated_nyt/data/comms"
+#dir_path = "/mnt/nfs/work1/mccallum/smysore/data/concretely_annotated_nyt/data/comms"
 politicians_file_path = '../data/unique_congress.txt' #path of file which has the names of politicians
-filenames_path = "../data/anyt_filenames.txt"
+#filenames_path = "../data/anyt_filenames.txt"
 output_dir = "../output/"
+
+dir_path = "../data/test5k"
+filenames_path = "../data/test5k_filenames.txt"
 
 # dir_path = "../../../data/anyt_sample"
 # politicians_file_path = "../../../universal-schema-bloomberg/data/congressperson_data/unique_congress.txt"
@@ -57,6 +60,7 @@ def match_article_to_politician(fname, set_politicians):
 		return -1
 
 	count = 0
+	found = False
 
 	# import ip:qdb; ipdb.set_trace()
 	for (uuid, tokenization_object) in comm.tokenizationForUUID.items():
@@ -70,6 +74,7 @@ def match_article_to_politician(fname, set_politicians):
 			tagged_token_object = ner_list[token_object.tokenIndex]
 
 			if tagged_token_object.tag == 'PERSON':
+				found = True
 				person = []
 				while tagged_token_object.tag == 'PERSON':
 					#if the cuurent token was a 'PERSON' add to person for all continuous 'PERSON' tags
@@ -84,14 +89,15 @@ def match_article_to_politician(fname, set_politicians):
 				logging.info("Found person : %s in file %s " % (person, fname) )
 				if(person in set_politicians):
 					logging.info("Matched %s in file %s " % (person, fname))
-					#check if this person is in the politician set, add to final dictionary if true
-					if(person in filtered_dictionary):
-						filtered_dictionary[person].append(fname) 
-					else:
-						filtered_dictionary[person] = [fname] 
+					
+					#adding this filename to the person in the dictionary
+					filtered_dictionary[person] = [fname] 
 			idx += 1
 
-		return filtered_dictionary
+	if(not found):
+		logging.info("Found no person in %s " % fname)
+
+	return filtered_dictionary
 
 
 
@@ -108,18 +114,27 @@ def get_filtered_files():
 	filtered_articles = {politician: [] for politician in set_politicians}
 
 	count = 0
+	count_found = 0
+	count_not_found = 0
+
 	for filename in os.listdir(dir_path):
 		politician_article_dicts = match_article_to_politician(filename, set_politicians)
 		if(isinstance(politician_article_dicts, int)):
 			count = count + 1
 		else:
-			for k,v in politician_article_dicts.items():
-				filtered_articles[k].extend(v)
+			if(not politician_article_dicts):
+				count_not_found += 1
+			else :
+				count_found += 1
+				for k,v in politician_article_dicts.items():
+					filtered_articles[k].extend(v)
 
-	print("Count of unprocessed articles : %d " % count)
-	print(filtered_articles)
+	logging.info("Count of unprocessed articles : %d " % count)
+	logging.info("Count of articles where politicians were found : %d " % count_found)
+	logging.info("Count of articles where politicians were not found : %d " % count_not_found)
+	#print(filtered_articles)
 
-	with open("politicians_filtered_articles.json", 'w') as f:
+	with open(options.output_dir + "politicians_filtered_articles_seq_test5k.json", 'w') as f:
 		json.dump(filtered_articles, f, indent=4)
 
 	logging.info('Complete.')
@@ -140,4 +155,6 @@ if not os.path.exists(options.output_dir):
 logging.basicConfig(filename= options.output_dir + 'log', filemode='w', level=logging.DEBUG)
 logging.getLogger().addHandler(logging.StreamHandler())
 
+
 get_filtered_files()
+
