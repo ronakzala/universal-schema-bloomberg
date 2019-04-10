@@ -228,17 +228,17 @@ def make_party_name_map(cp_dict, congress_num):
         reader = csv.DictReader(csvfile)
         for row in reader:
             if row['bioguide_id'] in cp_dict:
-                id_map[cp_dict[row['bioguide_id']]] = (row['first_name'] + row['last_name'], row['party'])
+                id_map[cp_dict[row['bioguide_id']]] = (row['first_name'] + " " + row['last_name'], row['party'])
             if row['lis_id'] in cp_dict:
-                id_map[cp_dict[row['lis_id']]] = (row['first_name'] + row['last_name'], row['party'])
+                id_map[cp_dict[row['lis_id']]] = (row['first_name'] + " " + row['last_name'], row['party'])
 
     with open('../data/congressperson_data/legislators-current.csv') as csvfile:
         reader = csv.DictReader(csvfile)
         for row in reader:
             if row['bioguide_id'] in cp_dict:
-                id_map[cp_dict[row['bioguide_id']]] = (row['first_name'] + row['last_name'], row['party'])
+                id_map[cp_dict[row['bioguide_id']]] = (row['first_name'] + " " + row['last_name'], row['party'])
             if row['lis_id'] in cp_dict:
-                id_map[cp_dict[row['lis_id']]] = (row['first_name'] + row['last_name'], row['party'])
+                id_map[cp_dict[row['lis_id']]] = (row['first_name'] + " " + row['last_name'], row['party'])
 
     cp_info = [id_map[i] for i in range(1 + max(id_map.keys()))]
     f = open("../data/preprocessing_metadata/cp_info_%d.txt" % congress_num, "w")
