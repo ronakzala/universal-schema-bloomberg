@@ -15,6 +15,7 @@ import shutil
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--path', help="Data set", type=str)
+parser.add_argument('--loadwords', help="Load words from file", default=False)
 
 NUM_WORDS = 2000
 stop_words = ["ourselves", "hers", "between", "yourself", "but", "again", "there", "about", "once", "during", "out", "very", "having", "with", "they", "own", "an", "be", "some", "for", "do", "its", "yours", "such", "into", "of", "most", "itself", "other", "off", "is", "s", "am", "or", "who", "as", "from", "him", "each", "the", "themselves", "until", "below", "are", "we", "these", "your", "his", "through", "don", "nor", "me", "were", "her", "more", "himself", "this", "down", "should", "our", "their", "while", "above", "both", "up", "to", "ours", "had", "she", "all", "no", "when", "at", "any", "before", "them", "same", "and", "been", "have", "in", "will", "on", "does", "yourselves", "then", "that", "because", "what", "over", "why", "so", "can", "did", "not", "now", "under", "he", "you", "herself", "has", "just", "where", "too", "only", "myself", "which", "those", "i", "after", "few", "whom", "t", "being", "if", "theirs", "my", "against", "a", "by", "doing", "it", "how", "further", "was", "here", "than"]
@@ -86,6 +87,9 @@ def per_politician_doc_term_vector(data_path, file_list, word_dict):
     :param word_dict: top 1000 words
     :return doc_term_vector (Column mean of doc_term_matrix)
     '''
+    if len(file_list) == 0:
+        return np.zeros((1, len(word_dict)))
+
     doc_term_matrix = np.zeros((len(file_list), len(word_dict)))
     done_bill_dict = {}
     bill_details = {}
@@ -117,11 +121,15 @@ def gen_politician_doc_term_matrix(politicians_bill_to_wiki, filtered_article_di
         for cp_wiki_name in wiki_names:
             doc_term_vector = per_politician_doc_term_vector(
                 data_path,
-                filtered_article_dict[cp_wiki_name],
+                filtered_article_dict[cp_wiki_name.lower()],
                 word_dict
             )
             vectors.append(doc_term_vector)
+            print(vectors)
         politician_to_vector_dict[cp_name] = np.mean(vectors, axis=0)
+
+    with open("../data/preprocessing_metadata/politician_to_word_vector_dict.json", 'w') as outfile:
+        json.dump(politician_to_vector_dict, outfile, indent=4)
 
     return politician_to_vector_dict
 
@@ -165,7 +173,14 @@ def main(arguments):
         file_list.extend(v)
     file_list = list(set(file_list))
 
-    word_dict = gen_word_dict(data_path, file_list)
+    if args.loadwords:
+        with open("../data/preprocessing_metadata/article_words.txt", 'r') as infile:
+            word_list = infile.readlines()
+            print("Loading words from file")
+        word_dict = {word.strip(): idx for idx, word in enumerate(word_list)}
+    else:
+        word_dict = gen_word_dict(data_path, file_list)
+    print(word_list[:100])
     politician_to_vector_dict = gen_politician_doc_term_matrix(
         politicians_bill_to_wiki,
         filtered_article_dict,
