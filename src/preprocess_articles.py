@@ -102,7 +102,7 @@ def per_politician_doc_term_vector(data_path, file_list, word_dict):
             if word_valid(word) and word in word_dict:
                 doc_term_matrix[idx, word_dict[word]] = 1
 
-    return np.mean(doc_term_matrix, axis=0)
+    return list(np.mean(doc_term_matrix, axis=0))
 
 
 def gen_politician_doc_term_matrix(politicians_bill_to_wiki, filtered_article_dict, data_path, word_dict):
@@ -126,11 +126,12 @@ def gen_politician_doc_term_matrix(politicians_bill_to_wiki, filtered_article_di
             )
             vectors.append(doc_term_vector)
             print(vectors)
-        politician_to_vector_dict[cp_name] = np.mean(vectors, axis=0)
+        politician_to_vector_dict[cp_name] = list(np.mean(vectors, axis=0))
 
+    '''
     with open("../data/preprocessing_metadata/politician_to_word_vector_dict.json", 'w') as outfile:
         json.dump(politician_to_vector_dict, outfile, indent=4)
-
+    '''
     return politician_to_vector_dict
 
 
@@ -140,7 +141,7 @@ def gen_per_congress_matrix(politician_to_vector_dict, congress_num):
     :param congress_num: Current congress
     :return pol_term_matrix: For current congress
     '''
-    with open("../data/preprocessing_metadata/cp_info_%s.txt" % congress_number, 'r') as cp_file:
+    with open("../data/preprocessing_metadata/cp_info_%s.txt" % congress_num, 'r') as cp_file:
         cp_info = cp_file.readlines()
     cp_info = [x.strip() for x in cp_info]
     pol_term_matrix = np.array((len(cp_info), NUM_WORDS))
