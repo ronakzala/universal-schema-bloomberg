@@ -192,7 +192,7 @@ class GenericTrainer:
         # its just the final model state.
         if self.early_stop:
             logging.info('Best model; Epoch {:d}; Iteration {:d}; Dev loss: {:.4f}'
-                             .format(best_epoch, best_iter, best_dev_loss.item()))
+                             .format(best_epoch, best_iter, best_dev_loss))
             self.model.load_state_dict(best_params)
 
         # Say how long things took.
