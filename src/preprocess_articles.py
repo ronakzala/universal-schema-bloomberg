@@ -16,6 +16,7 @@ import shutil
 parser = argparse.ArgumentParser()
 parser.add_argument('--path', help="Data set", type=str)
 parser.add_argument('--loadwords', help="Load words from file", default=False)
+parser.add_argument('--loaddict', help="Load dict from file", default=False)
 
 NUM_WORDS = 2000
 stop_words = ["ourselves", "hers", "between", "yourself", "but", "again", "there", "about", "once", "during", "out", "very", "having", "with", "they", "own", "an", "be", "some", "for", "do", "its", "yours", "such", "into", "of", "most", "itself", "other", "off", "is", "s", "am", "or", "who", "as", "from", "him", "each", "the", "themselves", "until", "below", "are", "we", "these", "your", "his", "through", "don", "nor", "me", "were", "her", "more", "himself", "this", "down", "should", "our", "their", "while", "above", "both", "up", "to", "ours", "had", "she", "all", "no", "when", "at", "any", "before", "them", "same", "and", "been", "have", "in", "will", "on", "does", "yourselves", "then", "that", "because", "what", "over", "why", "so", "can", "did", "not", "now", "under", "he", "you", "herself", "has", "just", "where", "too", "only", "myself", "which", "those", "i", "after", "few", "whom", "t", "being", "if", "theirs", "my", "against", "a", "by", "doing", "it", "how", "further", "was", "here", "than"]
@@ -87,10 +88,11 @@ def per_politician_doc_term_vector(data_path, file_list, word_dict):
     :param word_dict: top 1000 words
     :return doc_term_vector (Column mean of doc_term_matrix)
     '''
-    if len(file_list) == 0:
-        return list(np.zeros((1, len(word_dict))))
-
     doc_term_matrix = np.zeros((len(file_list), len(word_dict)))
+    if len(file_list) == 0:
+        #return list(np.mean(doc_term_matrix, axis=0))
+        return np.mean(doc_term_matrix, axis=0)
+
     done_bill_dict = {}
     bill_details = {}
 
@@ -102,7 +104,8 @@ def per_politician_doc_term_vector(data_path, file_list, word_dict):
             if word_valid(word) and word in word_dict:
                 doc_term_matrix[idx, word_dict[word]] = 1
 
-    return list(np.mean(doc_term_matrix, axis=0))
+    #return list(np.mean(doc_term_matrix, axis=0))
+    return np.mean(doc_term_matrix, axis=0)
 
 
 def gen_politician_doc_term_matrix(politicians_bill_to_wiki, filtered_article_dict, data_path, word_dict):
@@ -126,8 +129,8 @@ def gen_politician_doc_term_matrix(politicians_bill_to_wiki, filtered_article_di
             )
             vectors.append(doc_term_vector)
             print(vectors)
-        politician_to_vector_dict[cp_name] = list(np.mean(vectors, axis=0))
-
+        #politician_to_vector_dict[cp_name] = list(np.mean(vectors, axis=0))
+        politician_to_vector_dict[cp_name] = np.mean(vectors, axis=0).reshape(1, NUM_WORDS)
     '''
     with open("../data/preprocessing_metadata/politician_to_word_vector_dict.json", 'w') as outfile:
         json.dump(politician_to_vector_dict, outfile, indent=4)
@@ -143,11 +146,16 @@ def gen_per_congress_matrix(politician_to_vector_dict, congress_num):
     '''
     with open("../data/preprocessing_metadata/cp_info_%s.txt" % congress_num, 'r') as cp_file:
         cp_info = cp_file.readlines()
-    cp_info = [x.strip() for x in cp_info]
-    pol_term_matrix = np.array((len(cp_info), NUM_WORDS))
+    cp_info = [' '.join(x.strip().split()[:-1]) for x in cp_info]
+    pol_term_matrix = np.zeros((len(cp_info), NUM_WORDS))
+    logging.info(pol_term_matrix.shape)
     # This matrix can be indexed using the same index used in the model to refer to a specific cp
     for idx, cp_name in enumerate(cp_info):
-        pol_term_matrix[idx, :] = poltician_to_vector_dict[cp_name]
+        current_vector = [0.0 if p == 'NaN' else p for p in politician_to_vector_dict[cp_name]]
+        logging.info(current_vector)
+        #logging.info(pol_term_matrix[idx, :].shape)
+        #logging.info(len(current_vector))
+        pol_term_matrix[idx, :] = current_vector
     
     logging.info("Congress: %s, Size of matrix: %d" % (congress_num, pol_term_matrix.shape[0]))
     print("Congress: %s, Size of matrix: %d" % (congress_num, pol_term_matrix.shape[0]))
@@ -157,7 +165,7 @@ def gen_per_congress_matrix(politician_to_vector_dict, congress_num):
 def main(arguments):
     args = parser.parse_args(arguments)
     data_path = args.path
-    logging.basicConfig(filename='preprocess_articles.log', filemode='w', level=logging.DEBUG)
+    logging.basicConfig(filename='preprocess_articles_not_saving.log', filemode='w', level=logging.DEBUG)
     print("Hello")
     logging.info("Hello")
     # Get the JSON of filtered articles corresponding to each politician
@@ -182,17 +190,24 @@ def main(arguments):
     else:
         word_dict = gen_word_dict(data_path, file_list)
     print(word_list[:100])
-    politician_to_vector_dict = gen_politician_doc_term_matrix(
-        politicians_bill_to_wiki,
-        filtered_article_dict,
-        data_path,
-        word_dict
-    )
+
+    if args.loaddict:
+        with open("../data/preprocessing_metadata/politician_to_word_vector_dict.json", 'r') as infile:
+            politician_to_vector_dict = json.load(infile)
+            logging.info("Loading dicts from file")
+    else:
+        politician_to_vector_dict = gen_politician_doc_term_matrix(
+            politicians_bill_to_wiki,
+            filtered_article_dict,
+            data_path,
+            word_dict
+        )
     
     # Create an hdf5 file for each congress
     for congress in range(106, 110):
         pol_term_matrix = gen_per_congress_matrix(politician_to_vector_dict, str(congress))
-        filename = congress + '_text_features.hdf5'
+        np.savetxt('temp_%s.out' % str(congress), pol_term_matrix, delimiter=',')   # X is an array
+        filename = str(congress) + '_text_features_unsaved.hdf5'
         file_path = os.path.join("../data", filename)
         with h5py.File(file_path, "w") as f:
             f['politician_article_matrix'] = pol_term_matrix
