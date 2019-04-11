@@ -88,7 +88,7 @@ def per_politician_doc_term_vector(data_path, file_list, word_dict):
     :return doc_term_vector (Column mean of doc_term_matrix)
     '''
     if len(file_list) == 0:
-        return np.zeros((1, len(word_dict)))
+        return list(np.zeros((1, len(word_dict))))
 
     doc_term_matrix = np.zeros((len(file_list), len(word_dict)))
     done_bill_dict = {}
