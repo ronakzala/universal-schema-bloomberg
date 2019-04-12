@@ -1,8 +1,8 @@
 #!/bin/bash
 #
 #SBATCH --job-name=preprocess
-#SBATCH --output=loading.txt  # STDOUT outfile
-#SBATCH -e loading.err
+#SBATCH --output=log_files/glove.txt  # STDOUT outfile
+#SBATCH -e log_files/glove.err
 #SBATCH --partition=longq    # Partition to submit to 
 #
 #SBATCH --ntasks=1
