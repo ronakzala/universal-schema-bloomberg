@@ -48,7 +48,7 @@ def convert_split(in_path, entity_id_filename, relationship_id_filename, train_s
     sys.stdout.write('Starting storing id to entity map\n')
     for line_no, line in enumerate(entity_id_file):
         line = line.split()
-        if line_no % 10000 == 0:
+        if line_no % 100 == 0:
             sys.stdout.write('Processing example: {:d}\n'.format(line_no))
         if line[0] not in id2ent:
             id2ent[line[0]] = line[1]
