@@ -45,11 +45,15 @@ def convert_split(in_path, entity_id_filename, relationship_id_filename, train_s
 
     id2ent = {}
 
-    for line in entity_id_file:
+    sys.stdout.write('Starting storing id to entity map\n')
+    for line_no, line in enumerate(entity_id_file):
         line = line.split()
+        if line_no % 10000 == 0:
+            sys.stdout.write('Processing example: {:d}\n'.format(line_no))
         if line[0] not in id2ent:
             id2ent[line[0]] = line[1]
 
+    sys.stdout.write('Starting creating dev,train, and test set\n')
     for line_no, line in enumerate(relationship_id_file):
         line = line.split()
         line_data = "{} {} {}\n".format(id2ent[line[0]], id2ent[line[1]], line[2])
