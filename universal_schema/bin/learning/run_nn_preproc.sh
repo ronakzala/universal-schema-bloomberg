@@ -49,11 +49,11 @@ elif [[ $action == 'readable_neg' ]]; then
     test_file="$splits_path/test.json"
     neg_data_path="$splits_path/neg"
     mkdir -p "$neg_data_path"
-    gshuf "$train_file" > "$neg_data_path/train-shuf.json"
+    shuf "$train_file" > "$neg_data_path/train-shuf.json"
     echo "Created: $neg_data_path/train-shuf.json"
-    gshuf "$dev_file" > "$neg_data_path/dev-shuf.json"
+    shuf "$dev_file" > "$neg_data_path/dev-shuf.json"
     echo "Created: $neg_data_path/dev-shuf.json"
-    gshuf "$test_file" > "$neg_data_path/test-shuf.json"
+    shuf "$test_file" > "$neg_data_path/test-shuf.json"
     echo "Created: $neg_data_path/test-shuf.json"
 
     # Create readable negs.

@@ -53,6 +53,8 @@ def convert_split(in_path, entity_id_filename, relationship_id_filename, train_s
     for line_no, line in enumerate(relationship_id_file):
         line = line.split()
         line_data = "{} {} {}\n".format(id2ent[line[0]], id2ent[line[1]], line[2])
+        if line_no % 10000 == 0:
+            sys.stdout.write('Processing example: {:d}\n'.format(line_no))
         if line_no < train_lines:
             train_file.write(line_data)
         elif line_no < dev_lines:
