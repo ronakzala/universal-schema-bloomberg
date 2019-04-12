@@ -34,7 +34,7 @@ rm -f dev*
 rm -f test*
 echo "Cleaned the dataset directory"
 
-cmd="python $source_path/$script_name.py
+cmd="python2 $source_path/$script_name.py
     $action \
     --entity_id_file $entity_id_file \
     --relationship_id_file $relationship_id_file \

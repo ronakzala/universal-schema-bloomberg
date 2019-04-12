@@ -36,9 +36,9 @@ def convert2json(in_path):
 def convert_split(in_path, entity_id_filename, relationship_id_filename, train_split_size, dev_split_size, number_of_lines):
     entity_id_file = open(in_path + "/" + entity_id_filename)
     relationship_id_file = open(in_path + "/" + relationship_id_filename)
-    train_file = open(in_path + "/train.txt", 'x')
-    dev_file = open(in_path + "/dev.txt", 'x')
-    test_file = open(in_path + "/test.txt", 'x')
+    train_file = open(in_path + "/train.txt", 'w')
+    dev_file = open(in_path + "/dev.txt", 'w')
+    test_file = open(in_path + "/test.txt", 'w')
 
     train_lines = int((train_split_size/100)*number_of_lines)
     dev_lines = int(((train_split_size + dev_split_size) / 100) * number_of_lines)
