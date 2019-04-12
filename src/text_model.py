@@ -59,7 +59,7 @@ class BillModel(nn.Module):
 		y2 = self.embedding2(x1)
 		y2 = y2.view(y2.size(1))
 		# Transform article text into CP space
-		x2 = x[2].long()
+		x2 = x[2].double()
 		y3 = self.linear2(x2)
 		# Add dot(v_b, v_c) and dot(v_b, v_text)
 		y4 = torch.dot(y1, y2)
@@ -80,6 +80,7 @@ def main():
 	text_file = h5py.File(opt.textfile, 'r')
 
 	text_features = text_file['politician_article_matrix']
+	text_features = np.nan_to_num(text_features)
 
 	bill_matrix_train = data_file['bill_matrix_train']
 	bill_matrix_val = data_file['bill_matrix_val']
@@ -93,6 +94,7 @@ def main():
 	num_bills = data_file['num_bills'][0]
 	congress = opt.datafile.split('/')[-1].split('.')[0]
 
+	logging.basicConfig(filename='log_files/text_model_%s.log' % congress, filemode='w', level=logging.DEBUG)
 	if text_features.shape[0] != data_file['num_cp'][0]:
 		logging.warning("Number of politicians does not match: %d, %d" % (text_features.shape[0], data_file['num_cp'][0]))
 
@@ -107,7 +109,6 @@ def main():
 		"congress": congress
 	}
 
-	logging.basicConfig(filename='baseline_%s.log' % congress, filemode='w', level=logging.DEBUG)
 	logging.info("Number of bills: %d" % num_bills)
 	logging.info("Baseline accuracy: %f" % get_baseline(np.array(vote_matrix_train), np.array(vote_matrix_val), np.array(vote_matrix_test)))
 
@@ -222,7 +223,7 @@ def train_nn_embed_m(bill_matrix_train, vote_matrix_train, bill_matrix_test, vot
 
 	for ep in range(model_params["nepochs"]):
 		logging.info("Epoch: %d -------------------------" % ep)
-		evaluate_predictions(model, bill_matrix_test, vote_matrix_test, True, model_params["congress"])
+		evaluate_predictions(model, bill_matrix_test, vote_matrix_test, text_features, True, model_params["congress"])
 
 		for i in range(vote_matrix_train.shape[0]):
 			for j in range(vote_matrix_train.shape[1]):
@@ -231,18 +232,20 @@ def train_nn_embed_m(bill_matrix_train, vote_matrix_train, bill_matrix_test, vot
 					c = torch.ones(1) * j
 					y = torch.ones(1) * (vote_matrix_train[i][j] - 2)
 					y = y.double()
-					t = text_features[j]
+					t = torch.from_numpy(text_features[j])
+					#logging.info(text_features[j])
 					X = X.to(device)
 					y = y.to(device)
 					c = c.to(device) 
 					t = t.to(device)
 					optimizer.zero_grad()
 					pred = model([X, c, t])
+					#logging.info(pred)
 					loss = nll(pred, y)
 					loss.backward()
 					optimizer.step()
 
-	model_path = time.strftime("%Y%m%d-%H-%M-%S") + ".pt"
+	model_path = "saved_models/" + time.strftime("%Y%m%d-%H-%M-%S") + ".pt"
 	torch.save(model, model_path)
 	logging.info("Saved model to: %s" % model_path)
 
@@ -258,7 +261,7 @@ def get_predictions(model, vote_matrix, bill_matrix, text_features):
 			if vote_matrix[i][j] > 1:
 				X = bill_matrix[i]
 				c = torch.ones(1) * j
-				t = text_features[j]
+				t = torch.from_numpy(text_features[j])
 				X = X.to(device)
 				c = c.to(device)
 				t = t.to(device)

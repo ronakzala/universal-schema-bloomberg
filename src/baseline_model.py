@@ -85,7 +85,7 @@ def main():
 		"congress": congress
 	}
 
-	logging.basicConfig(filename='baseline_%s.log' % congress, filemode='w', level=logging.DEBUG)
+	logging.basicConfig(filename='log_files/baseline_%s.log' % congress, filemode='w', level=logging.DEBUG)
 	logging.info("Number of bills: %d" % num_bills)
 	logging.info("Baseline accuracy: %f" % get_baseline(np.array(vote_matrix_train), np.array(vote_matrix_val), np.array(vote_matrix_test)))
 
@@ -213,7 +213,7 @@ def train_nn_embed_m(bill_matrix_train, vote_matrix_train, bill_matrix_test, vot
 					loss.backward()
 					optimizer.step()
 
-	model_path = time.strftime("%Y%m%d-%H-%M-%S") + ".pt"
+	model_path = "saved_models/" + time.strftime("%Y%m%d-%H-%M-%S") + ".pt"
 	torch.save(model, model_path)
 	logging.info("Saved model to: %s" % model_path)
 
