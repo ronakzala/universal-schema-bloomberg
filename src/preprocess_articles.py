@@ -130,15 +130,15 @@ def gen_politician_doc_term_matrix(politicians_bill_to_wiki, filtered_article_di
             vectors.append(doc_term_vector)
             print(vectors)
         #politician_to_vector_dict[cp_name] = list(np.mean(vectors, axis=0))
-        politician_to_vector_dict[cp_name] = np.mean(vectors, axis=0).reshape(1, NUM_WORDS)
-    '''
+        politician_to_vector_dict[cp_name] = list(np.mean(vectors, axis=0).reshape(NUM_WORDS))
+    
     with open("../data/preprocessing_metadata/politician_to_word_vector_dict.json", 'w') as outfile:
         json.dump(politician_to_vector_dict, outfile, indent=4)
-    '''
+    
     return politician_to_vector_dict
 
 
-def gen_per_congress_matrix(politician_to_vector_dict, congress_num):
+def gen_per_congress_matrix(politician_to_vector_dict, congress_num, dim):
     ''' Generate per congress matrices to be used directly by model.
     :param politician_to_vector_dict: Mapping cp to doc_term_vector
     :param congress_num: Current congress
@@ -147,7 +147,7 @@ def gen_per_congress_matrix(politician_to_vector_dict, congress_num):
     with open("../data/preprocessing_metadata/cp_info_%s.txt" % congress_num, 'r') as cp_file:
         cp_info = cp_file.readlines()
     cp_info = [' '.join(x.strip().split()[:-1]) for x in cp_info]
-    pol_term_matrix = np.zeros((len(cp_info), NUM_WORDS))
+    pol_term_matrix = np.zeros((len(cp_info), dim))
     logging.info(pol_term_matrix.shape)
     # This matrix can be indexed using the same index used in the model to refer to a specific cp
     for idx, cp_name in enumerate(cp_info):
@@ -162,10 +162,57 @@ def gen_per_congress_matrix(politician_to_vector_dict, congress_num):
     return pol_term_matrix
 
 
+def parse_embeddings(pretrained_embed, word_dict):
+    ''' Create array of embeddings of top 1000 words.
+    Assign random embedding if word not present in glove embeddings.
+    :param pretrained_embed: Glove word embeddings
+    :param word_dict: Dictionary of top 1000 words
+    :return array: of word embeddings
+    '''
+    print("Parsing Embedding Matrix")
+    embeddings = np.zeros((len(word_dict), 50))
+    included_words = {}
+
+    with gzip.open(pretrained_embed, 'r') as f:
+        content = f.readlines()
+
+        for line in content:
+            #logging.info(line)
+            data = line.split()
+            embed_word = data[0].decode('UTF-8')
+            embed_floats = [float(x) for x in data[1:]]
+            if embed_word in word_dict:
+                embeddings[word_dict[embed_word]-1] = np.array(embed_floats)
+                included_words[embed_word] = 1
+
+    for word in word_dict:
+        if word not in included_words:
+            embeddings[word_dict[word]-1] = np.random.random(50)
+
+    return np.array(embeddings, dtype=np.float)
+
+
+def get_average_glove_vectors(embedding_matrix, politician_to_vector_dict, word_dict):
+    pol_to_embedding_dict = {}
+    for cp, doc_term_vector in politician_to_vector_dict.items():
+        current_embedding = []
+        for word_idx, word_count in enumerate(doc_term_vector):
+            if word_count != 'NaN' and word_count > 0.0:
+                current_embedding.append(embedding_matrix[word_idx])
+                #logging.info(embedding_matrix[word_idx].shape)
+        if len(current_embedding) > 0:
+            pol_to_embedding_dict[cp] = np.mean(current_embedding, axis=0).reshape(50)
+        else:
+            logging.info("No words for %s" % cp)
+            pol_to_embedding_dict[cp] = np.random.random(50).reshape(50)
+
+    return pol_to_embedding_dict
+
+
 def main(arguments):
     args = parser.parse_args(arguments)
     data_path = args.path
-    logging.basicConfig(filename='preprocess_articles_not_saving.log', filemode='w', level=logging.DEBUG)
+    logging.basicConfig(filename='log_files/preprocess_articles_not_saving.log', filemode='w', level=logging.DEBUG)
     print("Hello")
     logging.info("Hello")
     # Get the JSON of filtered articles corresponding to each politician
@@ -203,14 +250,23 @@ def main(arguments):
             word_dict
         )
     
+    embedding_matrix = parse_embeddings("../data/glove.6B.50d.txt.gz", word_dict)
+    politician_to_embedding_dict = get_average_glove_vectors(embedding_matrix, politician_to_vector_dict, word_dict)
     # Create an hdf5 file for each congress
     for congress in range(106, 110):
-        pol_term_matrix = gen_per_congress_matrix(politician_to_vector_dict, str(congress))
+        pol_term_matrix = gen_per_congress_matrix(politician_to_vector_dict, str(congress), NUM_WORDS)
         np.savetxt('temp_%s.out' % str(congress), pol_term_matrix, delimiter=',')   # X is an array
-        filename = str(congress) + '_text_features_unsaved.hdf5'
+        filename = str(congress) + '_text_feature_counts.hdf5'
         file_path = os.path.join("../data", filename)
         with h5py.File(file_path, "w") as f:
             f['politician_article_matrix'] = pol_term_matrix
+        pol_embedding_matrix = gen_per_congress_matrix(politician_to_embedding_dict, str(congress), 50)
+        np.savetxt('temp_%s_embedding.out' % str(congress), pol_embedding_matrix, delimiter=',')   # X is an array
+        filename = str(congress) + '_text_feature_embeddings.hdf5'
+        file_path = os.path.join("../data", filename)
+        with h5py.File(file_path, "w") as f:
+            f['politician_article_embedding_matrix'] = pol_embedding_matrix
+        
 
 if __name__ == '__main__':
     sys.exit(main(sys.argv[1:]))
