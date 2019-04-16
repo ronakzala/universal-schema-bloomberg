@@ -18,6 +18,7 @@ parser.add_argument('--nepochs', default='20', help='number of epochs')
 parser.add_argument('--dp', default='10', help='dp size')
 parser.add_argument('--modelpath', default='', help='model path')
 parser.add_argument('--textfile', default='', help='text data file')
+parser.add_argument('--modeltype', default='glove', help='glove or bag')
 
 
 class BillModel(nn.Module):
@@ -34,8 +35,12 @@ class BillModel(nn.Module):
 			model_params["word_embed_len"],
 			model_params["dp_size"]
 		)
+		if model_params["model_type"] == 'glove':
+			linear_size = model_params["word_embed_len"]
+		else:
+			linear_size = model_params["num_article_words"]
 		self.linear2 = nn.Linear(
-			model_params["num_article_words"],
+			linear_size,
 			model_params["dp_size"]
 		)
 		# Embedding layer for congresspersons
@@ -60,7 +65,7 @@ class BillModel(nn.Module):
 		y2 = y2.view(y2.size(1))
 		# Transform article text into CP space
 		x2 = x[2].double()
-		y3 = self.linear2(x2)
+		y3 = self.sigmoid(self.linear2(x2))
 		# Add dot(v_b, v_c) and dot(v_b, v_text)
 		y4 = torch.dot(y1, y2)
 		y5 = torch.dot(y1, y3)
@@ -79,7 +84,10 @@ def main():
 	data_file = h5py.File(opt.datafile, 'r')
 	text_file = h5py.File(opt.textfile, 'r')
 
-	text_features = text_file['politician_article_matrix']
+	if opt.modeltype == 'glove':
+		text_features = text_file['politician_article_embedding_matrix']
+	else:
+		text_features = text_file['politician_article_matrix']
 	text_features = np.nan_to_num(text_features)
 
 	bill_matrix_train = data_file['bill_matrix_train']
@@ -94,7 +102,7 @@ def main():
 	num_bills = data_file['num_bills'][0]
 	congress = opt.datafile.split('/')[-1].split('.')[0]
 
-	logging.basicConfig(filename='log_files/text_model_%s.log' % congress, filemode='w', level=logging.DEBUG)
+	logging.basicConfig(filename='log_files/text_model_%s_%s.log' % (congress, opt.modeltype), filemode='w', level=logging.DEBUG)
 	if text_features.shape[0] != data_file['num_cp'][0]:
 		logging.warning("Number of politicians does not match: %d, %d" % (text_features.shape[0], data_file['num_cp'][0]))
 
@@ -106,7 +114,8 @@ def main():
 		"word_embed_len": 50,
 		"num_cp": data_file['num_cp'][0],
 		"num_article_words": 2000,
-		"congress": congress
+		"congress": congress,
+		"model_type": opt.modeltype
 	}
 
 	logging.info("Number of bills: %d" % num_bills)
@@ -245,7 +254,7 @@ def train_nn_embed_m(bill_matrix_train, vote_matrix_train, bill_matrix_test, vot
 					loss.backward()
 					optimizer.step()
 
-	model_path = "saved_models/" + time.strftime("%Y%m%d-%H-%M-%S") + ".pt"
+	model_path = "saved_models/" + time.strftime("%Y%m%d-%H-%M-%S") + "_" + congress + ".pt"
 	torch.save(model, model_path)
 	logging.info("Saved model to: %s" % model_path)
 
@@ -255,10 +264,12 @@ def train_nn_embed_m(bill_matrix_train, vote_matrix_train, bill_matrix_test, vot
 def get_predictions(model, vote_matrix, bill_matrix, text_features):
 	device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 	model.to(device)
+	count_preds = 0
 	predictions = np.zeros_like(vote_matrix)
 	for i in range(vote_matrix.shape[0]):
 		for j in range(vote_matrix.shape[1]):
 			if vote_matrix[i][j] > 1:
+				count_preds += 1
 				X = bill_matrix[i]
 				c = torch.ones(1) * j
 				t = torch.from_numpy(text_features[j])
@@ -268,6 +279,7 @@ def get_predictions(model, vote_matrix, bill_matrix, text_features):
 				pred = model([X, c, t])
 				predictions[i, j] = 3 if pred.item() >= 0.5 else 2
 
+	logging.info("Made predictions for : %d out of %d" % (count_preds, vote_matrix.shape[0] * vote_matrix.shape[1]))
 	return predictions
 
 

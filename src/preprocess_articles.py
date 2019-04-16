@@ -256,13 +256,13 @@ def main(arguments):
     for congress in range(106, 110):
         pol_term_matrix = gen_per_congress_matrix(politician_to_vector_dict, str(congress), NUM_WORDS)
         np.savetxt('temp_%s.out' % str(congress), pol_term_matrix, delimiter=',')   # X is an array
-        filename = str(congress) + '_text_feature_counts.hdf5'
+        filename = str(congress) + '_text_bag.hdf5'
         file_path = os.path.join("../data", filename)
         with h5py.File(file_path, "w") as f:
             f['politician_article_matrix'] = pol_term_matrix
         pol_embedding_matrix = gen_per_congress_matrix(politician_to_embedding_dict, str(congress), 50)
         np.savetxt('temp_%s_embedding.out' % str(congress), pol_embedding_matrix, delimiter=',')   # X is an array
-        filename = str(congress) + '_text_feature_embeddings.hdf5'
+        filename = str(congress) + '_text_glove.hdf5'
         file_path = os.path.join("../data", filename)
         with h5py.File(file_path, "w") as f:
             f['politician_article_embedding_matrix'] = pol_embedding_matrix
