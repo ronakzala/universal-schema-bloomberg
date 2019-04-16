@@ -1,3 +1,5 @@
 *.hdf5
-
+model_runs/
+datasets_proc/
+logs/
 .DS_Store

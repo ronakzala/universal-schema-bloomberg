@@ -36,23 +36,29 @@ def convert2json(in_path):
 def convert_split(in_path, entity_id_filename, relationship_id_filename, train_split_size, dev_split_size, number_of_lines):
     entity_id_file = open(in_path + "/" + entity_id_filename)
     relationship_id_file = open(in_path + "/" + relationship_id_filename)
-    train_file = open(in_path + "/train.txt", 'x')
-    dev_file = open(in_path + "/dev.txt", 'x')
-    test_file = open(in_path + "/test.txt", 'x')
+    train_file = open(in_path + "/train.txt", 'w')
+    dev_file = open(in_path + "/dev.txt", 'w')
+    test_file = open(in_path + "/test.txt", 'w')
 
     train_lines = int((train_split_size/100)*number_of_lines)
     dev_lines = int(((train_split_size + dev_split_size) / 100) * number_of_lines)
 
     id2ent = {}
 
-    for line in entity_id_file:
+    sys.stdout.write('Starting storing id to entity map\n')
+    for line_no, line in enumerate(entity_id_file):
         line = line.split()
+        if line_no % 100 == 0:
+            sys.stdout.write('Processing example: {:d}\n'.format(line_no))
         if line[0] not in id2ent:
             id2ent[line[0]] = line[1]
 
+    sys.stdout.write('Starting creating dev,train, and test set\n')
     for line_no, line in enumerate(relationship_id_file):
         line = line.split()
         line_data = "{} {} {}\n".format(id2ent[line[0]], id2ent[line[1]], line[2])
+        if line_no % 10000 == 0:
+            sys.stdout.write('Processing example: {:d}\n'.format(line_no))
         if line_no < train_lines:
             train_file.write(line_data)
         elif line_no < dev_lines:

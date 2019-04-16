@@ -4,8 +4,8 @@ import argparse
 
 def process_freebase_sample(input_file_path):
     input_file = open(input_file_path)
-    shuffled_relations_output_file = open(input_file_path+"_shuffled", mode='x')
-    unique_entities_output_file = open(input_file_path+"_unique_entities", mode='x')
+    shuffled_relations_output_file = open(input_file_path+"_shuffled", mode='w')
+    unique_entities_output_file = open(input_file_path+"_unique_entities", mode='w')
 
     entities_set = set()
     entity_tup = []

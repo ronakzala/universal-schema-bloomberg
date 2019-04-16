@@ -24,7 +24,7 @@ script_name="convert2json"
 
 # Shuffling the input - relationship to entity file
 cd $data_source_path
-gshuf "$relationship_id_file" > "$relationship_id_file-shuf"
+shuf "$relationship_id_file" > "$relationship_id_file-shuf"
 echo "Created: $relationship_id_file-shuf"
 num_of_lines=$(< "$relationship_id_file" wc -l)
 
@@ -34,7 +34,7 @@ rm -f dev*
 rm -f test*
 echo "Cleaned the dataset directory"
 
-cmd="python $source_path/$script_name.py
+cmd="python2 $source_path/$script_name.py
     $action \
     --entity_id_file $entity_id_file \
     --relationship_id_file $relationship_id_file \
