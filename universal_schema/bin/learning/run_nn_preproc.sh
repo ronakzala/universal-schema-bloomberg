@@ -51,6 +51,7 @@ elif [[ $action == 'readable_neg' ]]; then
     test_file="$splits_path/test.json"
     neg_data_path="$splits_path/neg"
     mkdir -p "$neg_data_path"
+    echo "Creating the shuffled relations file now"
     shuf "$train_file" > "$neg_data_path/train-shuf.json"
     echo "Created: $neg_data_path/train-shuf.json"
     shuf "$dev_file" > "$neg_data_path/dev-shuf.json"
