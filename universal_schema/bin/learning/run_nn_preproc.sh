@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+echo "Starting the pre-processing script !"
+
 # Parse command line args.
 while getopts ":a:e:d:" opt; do
     case "$opt" in
