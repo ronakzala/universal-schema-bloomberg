@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-
+echo "Starting the convert2json script"
 # Parse command line args.
 while getopts ":r:t:d:" opt; do
     case "$opt" in
