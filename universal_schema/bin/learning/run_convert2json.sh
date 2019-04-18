@@ -21,6 +21,7 @@ done
 source_path="$CUR_PROJ_DIR/src/learning"
 data_source_path="$CUR_PROJ_DIR/datasets_proc/freebase/latfeatus"
 script_name="convert2json"
+cd $data_source_path
 num_of_lines=$(< "$relationship_id_file" wc -l)
 
 if [[ $parse_type == 'split' ]]; then
