@@ -81,8 +81,8 @@ def convert_split(in_path, relationship_entity_filename, train_split_size, dev_s
     dev_file = open(in_path + "/dev.txt", 'w')
     test_file = open(in_path + "/test.txt", 'w')
 
-    train_lines = int((train_split_size/100)*number_of_lines)
-    dev_lines = train_lines + int((dev_split_size/100) * number_of_lines)
+    train_lines = (train_split_size*number_of_lines)/100
+    dev_lines = train_lines + ((dev_split_size*number_of_lines)/100)
     sys.stdout.write('No. of lines going to train set: {}\n'.format(train_lines))
     sys.stdout.write('No. of lines going to dev set: {}\n'.format(dev_lines))
     sys.stdout.write('No. of lines going to test set: {}\n'.format(number_of_lines - train_lines -dev_lines))
