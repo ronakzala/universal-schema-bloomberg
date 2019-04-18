@@ -30,6 +30,7 @@ def convert2json(in_path):
                 if pos_doc_id % 1000000 == 0:
                     sys.stdout.write('Processing example: {:d}\n'.format(pos_doc_id))
             except:
+                sys.stdout.write('Exception occured for the following line !!!')
                 sys.stdout.write('Processing example: {:d}\n'.format(pos_doc_id))
                 sys.stdout.write(line)
         pos_split_file.close()
@@ -81,7 +82,10 @@ def convert_split(in_path, relationship_entity_filename, train_split_size, dev_s
     test_file = open(in_path + "/test.txt", 'w')
 
     train_lines = int((train_split_size/100)*number_of_lines)
-    dev_lines = int(((train_split_size + dev_split_size) / 100) * number_of_lines)
+    dev_lines = train_lines + int((dev_split_size/100) * number_of_lines)
+    sys.stdout.write('No. of lines going to train set: {}\n'.format(train_lines))
+    sys.stdout.write('No. of lines going to dev set: {}\n'.format(dev_lines))
+    sys.stdout.write('No. of lines going to test set: {}\n'.format(number_of_lines - train_lines -dev_lines))
 
     sys.stdout.write('Starting creating dev,train, and test set\n')
     for line_no, line in enumerate(relationship_id_file):
