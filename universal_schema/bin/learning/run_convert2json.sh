@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 
 # Parse command line args.
-while getopts ":e:r:t:d:" opt; do
+while getopts ":r:t:d:" opt; do
     case "$opt" in
-        e) entity_id_file=$OPTARG ;;
         r) relationship_id_file=$OPTARG ;;
         t) train_split=$OPTARG ;;
         d) dev_split=$OPTARG ;;
@@ -36,7 +35,6 @@ echo "Cleaned the dataset directory"
 
 cmd="python2 $source_path/$script_name.py
     $action \
-    --entity_id_file $entity_id_file \
     --relationship_id_file $relationship_id_file \
     --train_split $train_split \
     --dev_split $dev_split \
