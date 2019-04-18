@@ -30,9 +30,8 @@ def convert2json(in_path):
                 if pos_doc_id % 1000000 == 0:
                     sys.stdout.write('Processing example: {:d}\n'.format(pos_doc_id))
             except:
-                sys.stdout.write('Exception occured for the following line !!!')
-                sys.stdout.write('Processing example: {:d}\n'.format(pos_doc_id))
-                sys.stdout.write(line)
+                sys.stdout.write('Skipping example: {:d}\n'.format(pos_doc_id))
+                sys.stdout.write('Unable to parse \n')
         pos_split_file.close()
         sys.stdout.write('Wrote: {:s}\n'.format(pos_split_file.name))
         sys.stdout.write('Took: {:4.4f}s\n\n'.format(time.time() - start_time))
