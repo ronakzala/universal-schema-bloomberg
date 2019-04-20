@@ -18,6 +18,7 @@ parser.add_argument('--nepochs', default='20', help='number of epochs')
 parser.add_argument('--dp', default='10', help='dp size')
 parser.add_argument('--modelpath', default='', help='model path')
 parser.add_argument('--congress', default='106', help='congress session')
+parser.add_argument('--runeval', default=True, help='Run full eval', type=bool)
 
 
 class BillModel(nn.Module):
@@ -84,7 +85,7 @@ def main():
 		"word_embed_len": 50,
 		"num_cp": data_file['num_cp'][0],
 		"congress": opt.congress,
-		"full_eval": False
+		"full_eval": opt.runeval
 	}
 
 	logging.basicConfig(filename='log_files/baseline_%s.log' % log_name, filemode='w', level=logging.DEBUG)

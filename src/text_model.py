@@ -20,6 +20,7 @@ parser.add_argument('--modelpath', default='', help='model path')
 parser.add_argument('--textfile', default='', help='text data file')
 parser.add_argument('--modeltype', default='glove', help='glove or bag')
 parser.add_argument('--congress', default='106', help='congress session')
+parser.add_argument('--runeval', default=True, help='Run full eval', type=bool)
 
 
 class BillModel(nn.Module):
@@ -112,7 +113,7 @@ def main():
 		"num_article_words": 2000,
 		"congress": opt.congress,
 		"model_type": opt.modeltype,
-		"full_eval": False
+		"full_eval": opt.runeval
 	}
 
 	logging.basicConfig(
@@ -128,7 +129,7 @@ def main():
 		if os.path.isfile(opt.modelpath):
 			model = torch.load(opt.modelpath)
 			model.eval()
-			evaluate_predictions(model, bill_matrix_test, vote_matrix_test, text_features, False, congress, full_eval=model_params["full_eval"])
+			evaluate_predictions(model, bill_matrix_test, vote_matrix_test, text_features, False, opt.congress, full_eval=model_params["full_eval"])
 		else:
 			logging.error("Error loading model from %s" % opt.modelpath)
 		return
@@ -142,7 +143,7 @@ def main():
 		embedding_matrix,
 		model_params
 	)
-	evaluate_predictions(nn_model, bill_matrix_test, vote_matrix_test, text_features, False, congress, model_params["full_eval"])
+	evaluate_predictions(nn_model, bill_matrix_test, vote_matrix_test, text_features, False, opt.congress, full_eval=model_params["full_eval"])
 
 
 def make_sparse_list_input(inp):
@@ -169,8 +170,7 @@ def evaluate_predictions(model, bill_matrix, vote_matrix, text_features, val=Tru
 	predictions = get_predictions(model, vote_matrix, bill_matrix, text_features)
 	accuracy, precision, recall, f1 = get_accuracy_stats(np.array(vote_matrix), predictions)
 	logging.info("%s Accuracy: %.6f" % ("Val" if val else "Test", accuracy))	
-	if epoch != 0:
-		logging.info("Precision %.6f, Recall %.6f, F1 %.6f" % (precision, recall, f1))
+	logging.info("Precision %.6f, Recall %.6f, F1 %.6f" % (precision, recall, f1))
 	if val or not full_eval:		
 		return accuracy
 
