@@ -175,12 +175,12 @@ class GenericTrainer:
                         best_params = copy.deepcopy(self.model.state_dict())
                         best_epoch = epoch
                         best_iter = iteration
-                        everything = (epoch, iteration, self.total_iters, dev_loss.item())
+                        everything = (epoch, iteration, self.total_iters, dev_loss)
                         if self.verbose:
                             logging.info('Current best model; Epoch {:d}; '
                                          'Iteration {:d}/{:d}; Dev loss: {:.4f}'.format(*everything))
                     else:
-                        everything = (epoch, iteration, self.total_iters, dev_loss.item())
+                        everything = (epoch, iteration, self.total_iters, dev_loss)
                         if self.verbose:
                             logging.info('Epoch {:d}; Iteration {:d}/{:d}; Dev loss: {:.4f}'.format(*everything))
                 iteration += 1
