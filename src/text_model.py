@@ -10,6 +10,12 @@ import torch.nn as nn
 
 import time
 
+def boolean_string(s):
+	if s not in {'False', 'True'}:
+		raise ValueError('Not a valid boolean string')
+	return s == 'True'
+
+
 parser = argparse.ArgumentParser()
 parser.add_argument('--datafile', default='', help='data file')
 parser.add_argument('--classifier', default='nb', help='classifier to use')
@@ -20,7 +26,7 @@ parser.add_argument('--modelpath', default='', help='model path')
 parser.add_argument('--textfile', default='', help='text data file')
 parser.add_argument('--modeltype', default='glove', help='glove or bag')
 parser.add_argument('--congress', default='106', help='congress session')
-parser.add_argument('--runeval', default=True, help='Run full eval', type=bool)
+parser.add_argument('--runeval', default=False, type=boolean_string, help='Run full eval')
 
 
 class BillModel(nn.Module):
@@ -123,11 +129,15 @@ def main():
 
 	logging.info("Number of bills: %d" % num_bills)
 	logging.info("Baseline accuracy: %f" % get_baseline(np.array(vote_matrix_train), np.array(vote_matrix_val), np.array(vote_matrix_test)))
+	logging.info("Running eval: %s" % opt.runeval)
 
 	# Use existing model, located at given path
 	if opt.modelpath != '':
 		if os.path.isfile(opt.modelpath):
-			model = torch.load(opt.modelpath)
+			if torch.cuda.is_available():
+				model = torch.load(opt.modelpath)
+			else:
+				model = torch.load(opt.modelpath, map_location='cpu')
 			model.eval()
 			evaluate_predictions(model, bill_matrix_test, vote_matrix_test, text_features, False, opt.congress, full_eval=model_params["full_eval"])
 		else:
