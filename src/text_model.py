@@ -10,6 +10,8 @@ import torch.nn as nn
 
 import time
 
+import evaluation_plots
+
 def boolean_string(s):
 	if s not in {'False', 'True'}:
 		raise ValueError('Not a valid boolean string')
@@ -119,11 +121,17 @@ def main():
 		"num_article_words": 2000,
 		"congress": opt.congress,
 		"model_type": opt.modeltype,
-		"full_eval": opt.runeval
+		"full_eval": opt.runeval,
+		"make_plots": False,
+		"debug": False
 	}
 
-	logging.basicConfig(
-		filename='log_files/text_model_%s_%s_%s.log' % (opt.congress, opt.modeltype, 'eval' if model_params["full_eval"] else 'no_eval'), filemode='w', level=logging.DEBUG)
+	log_file = "text_model_%s_%s_%s.log" % (opt.congress, opt.modeltype, 'eval' if model_params["full_eval"] else 'no_eval')
+	if model_params["debug"]:
+		logging.basicConfig(level=logging.DEBUG)
+	else:
+		logging.basicConfig(filename='log_files/%s' % log_file, filemode='w', level=logging.DEBUG)
+
 	if text_features.shape[0] != data_file['num_cp'][0]:
 		logging.warning("Number of politicians does not match: %d, %d" % (text_features.shape[0], data_file['num_cp'][0]))
 
@@ -135,25 +143,28 @@ def main():
 	if opt.modelpath != '':
 		if os.path.isfile(opt.modelpath):
 			if torch.cuda.is_available():
-				model = torch.load(opt.modelpath)
+				nn_model = torch.load(opt.modelpath)
 			else:
-				model = torch.load(opt.modelpath, map_location='cpu')
-			model.eval()
-			evaluate_predictions(model, bill_matrix_test, vote_matrix_test, text_features, False, opt.congress, full_eval=model_params["full_eval"])
+				nn_model = torch.load(opt.modelpath, map_location='cpu')
+			nn_model.eval()
 		else:
 			logging.error("Error loading model from %s" % opt.modelpath)
-		return
 
-	nn_model = train_nn_embed_m(
-		bill_matrix_train,
-		vote_matrix_train,
-		bill_matrix_val,
-		vote_matrix_val,
-                text_features,
-		embedding_matrix,
-		model_params
-	)
+	else:
+		nn_model = train_nn_embed_m(
+			bill_matrix_train,
+			vote_matrix_train,
+			bill_matrix_val,
+			vote_matrix_val,
+	                text_features,
+			embedding_matrix,
+			model_params
+		)
+
 	evaluate_predictions(nn_model, bill_matrix_test, vote_matrix_test, text_features, False, opt.congress, full_eval=model_params["full_eval"])
+
+	if model_params["make_plots"]:
+		evaluation_plots.make_plots(nn_model, vote_matrix_test, bill_matrix_test, text_features, opt.congress)
 
 
 def make_sparse_list_input(inp):
