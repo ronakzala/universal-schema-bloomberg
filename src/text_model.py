@@ -122,8 +122,8 @@ def main():
 		"congress": opt.congress,
 		"model_type": opt.modeltype,
 		"full_eval": opt.runeval,
-		"make_plots": False,
-		"debug": False
+		"make_plots": True,
+		"debug": True
 	}
 
 	log_file = "text_model_%s_%s_%s.log" % (opt.congress, opt.modeltype, 'eval' if model_params["full_eval"] else 'no_eval')
@@ -161,10 +161,11 @@ def main():
 			model_params
 		)
 
-	evaluate_predictions(nn_model, bill_matrix_test, vote_matrix_test, text_features, False, opt.congress, full_eval=model_params["full_eval"])
+	_, predictions = evaluate_predictions(
+		nn_model, bill_matrix_test, vote_matrix_test, text_features, False, opt.congress, full_eval=model_params["full_eval"])
 
 	if model_params["make_plots"]:
-		evaluation_plots.make_plots(nn_model, vote_matrix_test, bill_matrix_test, text_features, opt.congress)
+		evaluation_plots.make_plots(nn_model, vote_matrix_test, bill_matrix_test, text_features, predictions, opt.congress)
 
 
 def make_sparse_list_input(inp):
@@ -193,7 +194,7 @@ def evaluate_predictions(model, bill_matrix, vote_matrix, text_features, val=Tru
 	logging.info("%s Accuracy: %.6f" % ("Val" if val else "Test", accuracy))	
 	logging.info("Precision %.6f, Recall %.6f, F1 %.6f" % (precision, recall, f1))
 	if val or not full_eval:		
-		return accuracy
+		return accuracy, predictions
 
 	with open("../data/preprocessing_metadata/eval_info.json", 'r') as infile:
 		eval_set = json.load(infile)
@@ -217,8 +218,7 @@ def evaluate_predictions(model, bill_matrix, vote_matrix, text_features, val=Tru
 	logging.info("Test Accuracy: %.6f" % accuracy)
 	logging.info("Precision %.6f, Recall %.6f, F1 %.6f" % (precision, recall, f1))
 
-	return None
-
+	return None, predictions
 
 
 def train_nn_embed_m(bill_matrix_train, vote_matrix_train, bill_matrix_test, vote_matrix_test, text_features, embedding_matrix, model_params):
@@ -252,7 +252,7 @@ def train_nn_embed_m(bill_matrix_train, vote_matrix_train, bill_matrix_test, vot
 	val_accuracy = 0.0
 	for ep in range(model_params["nepochs"]):
 		logging.info("Epoch: %d -------------------------" % ep)
-		new_accuracy = evaluate_predictions(
+		new_accuracy, _ = evaluate_predictions(
 			model,
 			bill_matrix_test,
 			vote_matrix_test,
