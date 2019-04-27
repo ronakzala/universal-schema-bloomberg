@@ -10,6 +10,14 @@ import torch.nn as nn
 
 import time
 
+import evaluation_plots
+
+def boolean_string(s):
+	if s not in {'False', 'True'}:
+		raise ValueError('Not a valid boolean string')
+	return s == 'True'
+
+
 parser = argparse.ArgumentParser()
 parser.add_argument('--datafile', default='', help='data file')
 parser.add_argument('--classifier', default='nb', help='classifier to use')
@@ -20,6 +28,7 @@ parser.add_argument('--modelpath', default='', help='model path')
 parser.add_argument('--textfile', default='', help='text data file')
 parser.add_argument('--modeltype', default='glove', help='glove or bag')
 parser.add_argument('--congress', default='106', help='congress session')
+parser.add_argument('--runeval', default=False, type=boolean_string, help='Run full eval')
 
 
 class BillModel(nn.Module):
@@ -112,37 +121,51 @@ def main():
 		"num_article_words": 2000,
 		"congress": opt.congress,
 		"model_type": opt.modeltype,
-		"full_eval": False
+		"full_eval": opt.runeval,
+		"make_plots": True,
+		"debug": True
 	}
 
-	logging.basicConfig(
-		filename='log_files/text_model_%s_%s_%s.log' % (opt.congress, opt.modeltype, 'eval' if model_params["full_eval"] else 'no_eval'), filemode='w', level=logging.DEBUG)
+	log_file = "text_model_%s_%s_%s.log" % (opt.congress, opt.modeltype, 'eval' if model_params["full_eval"] else 'no_eval')
+	if model_params["debug"]:
+		logging.basicConfig(level=logging.DEBUG)
+	else:
+		logging.basicConfig(filename='log_files/%s' % log_file, filemode='w', level=logging.DEBUG)
+
 	if text_features.shape[0] != data_file['num_cp'][0]:
 		logging.warning("Number of politicians does not match: %d, %d" % (text_features.shape[0], data_file['num_cp'][0]))
 
 	logging.info("Number of bills: %d" % num_bills)
 	logging.info("Baseline accuracy: %f" % get_baseline(np.array(vote_matrix_train), np.array(vote_matrix_val), np.array(vote_matrix_test)))
+	logging.info("Running eval: %s" % opt.runeval)
 
 	# Use existing model, located at given path
 	if opt.modelpath != '':
 		if os.path.isfile(opt.modelpath):
-			model = torch.load(opt.modelpath)
-			model.eval()
-			evaluate_predictions(model, bill_matrix_test, vote_matrix_test, text_features, False, congress, full_eval=model_params["full_eval"])
+			if torch.cuda.is_available():
+				nn_model = torch.load(opt.modelpath)
+			else:
+				nn_model = torch.load(opt.modelpath, map_location='cpu')
+			nn_model.eval()
 		else:
 			logging.error("Error loading model from %s" % opt.modelpath)
-		return
 
-	nn_model = train_nn_embed_m(
-		bill_matrix_train,
-		vote_matrix_train,
-		bill_matrix_val,
-		vote_matrix_val,
-                text_features,
-		embedding_matrix,
-		model_params
-	)
-	evaluate_predictions(nn_model, bill_matrix_test, vote_matrix_test, text_features, False, congress, model_params["full_eval"])
+	else:
+		nn_model = train_nn_embed_m(
+			bill_matrix_train,
+			vote_matrix_train,
+			bill_matrix_val,
+			vote_matrix_val,
+	                text_features,
+			embedding_matrix,
+			model_params
+		)
+
+	_, predictions = evaluate_predictions(
+		nn_model, bill_matrix_test, vote_matrix_test, text_features, False, opt.congress, full_eval=model_params["full_eval"])
+
+	if model_params["make_plots"]:
+		evaluation_plots.make_plots(nn_model, vote_matrix_test, bill_matrix_test, text_features, predictions, opt.congress)
 
 
 def make_sparse_list_input(inp):
@@ -169,10 +192,9 @@ def evaluate_predictions(model, bill_matrix, vote_matrix, text_features, val=Tru
 	predictions = get_predictions(model, vote_matrix, bill_matrix, text_features)
 	accuracy, precision, recall, f1 = get_accuracy_stats(np.array(vote_matrix), predictions)
 	logging.info("%s Accuracy: %.6f" % ("Val" if val else "Test", accuracy))	
-	if epoch != 0:
-		logging.info("Precision %.6f, Recall %.6f, F1 %.6f" % (precision, recall, f1))
+	logging.info("Precision %.6f, Recall %.6f, F1 %.6f" % (precision, recall, f1))
 	if val or not full_eval:		
-		return accuracy
+		return accuracy, predictions
 
 	with open("../data/preprocessing_metadata/eval_info.json", 'r') as infile:
 		eval_set = json.load(infile)
@@ -196,8 +218,7 @@ def evaluate_predictions(model, bill_matrix, vote_matrix, text_features, val=Tru
 	logging.info("Test Accuracy: %.6f" % accuracy)
 	logging.info("Precision %.6f, Recall %.6f, F1 %.6f" % (precision, recall, f1))
 
-	return None
-
+	return None, predictions
 
 
 def train_nn_embed_m(bill_matrix_train, vote_matrix_train, bill_matrix_test, vote_matrix_test, text_features, embedding_matrix, model_params):
@@ -231,7 +252,7 @@ def train_nn_embed_m(bill_matrix_train, vote_matrix_train, bill_matrix_test, vot
 	val_accuracy = 0.0
 	for ep in range(model_params["nepochs"]):
 		logging.info("Epoch: %d -------------------------" % ep)
-		new_accuracy = evaluate_predictions(
+		new_accuracy, _ = evaluate_predictions(
 			model,
 			bill_matrix_test,
 			vote_matrix_test,
