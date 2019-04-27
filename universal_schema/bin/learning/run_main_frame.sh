@@ -55,34 +55,34 @@ source "$hparam_config"
 run_time=`date '+%Y_%m_%d-%H_%M_%S'`
 int_mapped_path="$CUR_PROJ_DIR/datasets_proc/${dataset}/${experiment}"
 
-# Create shuffled copies of the dataset; one for each epoch.
-#if [[ $action == 'train_model' ]]; then
-#    train_file="$int_mapped_path/train-im-full.json"
-#    train_neg_file="$int_mapped_path/train-neg-im-full.json"
-#    dev_file="$int_mapped_path/dev-im-full.json"
-#    test_file="$int_mapped_path/test-im-full.json"
-#    shuffled_data_path="$int_mapped_path/shuffled_data"
-#    mkdir -p "$shuffled_data_path"
-#    # Create a subset of training examples.
-#    temp_train="$shuffled_data_path/train-im-full-subset.json"
-#    head -n "$train_size" "$train_file" > "$temp_train"
-#    temp_train_neg="$shuffled_data_path/train-neg-im-full-subset.json"
-#    head -n "$train_size" "$train_neg_file" > "$temp_train_neg"
-#    # Shuffle this subset file.
-#    train_file="$temp_train"
-#    train_neg_file="$temp_train_neg"
-#    for (( i=0; i<$epochs; i+=1 )); do
-#        # Shuffle the negative and positive file with the same random seed
-#        # so individual examples are aligned.
-#        randomseed=$RANDOM
-#        fname="$shuffled_data_path/train-im-full-$i.json"
-#        shuf --random-source=<(get_seeded_random $randomseed) "$train_file" --output="$fname"
-#        echo "Created: $fname"
-#        fname="$shuffled_data_path/train-neg-im-full-$i.json"
-#        shuf --random-source=<(get_seeded_random $randomseed) "$train_neg_file" --output="$fname"
-#        echo "Created: $fname"
-#    done
-#fi
+ Create shuffled copies of the dataset; one for each epoch.
+if [[ $action == 'train_model' ]]; then
+    train_file="$int_mapped_path/train-im-full.json"
+    train_neg_file="$int_mapped_path/train-neg-im-full.json"
+    dev_file="$int_mapped_path/dev-im-full.json"
+    test_file="$int_mapped_path/test-im-full.json"
+    shuffled_data_path="$int_mapped_path/shuffled_data"
+    mkdir -p "$shuffled_data_path"
+    # Create a subset of training examples.
+    temp_train="$shuffled_data_path/train-im-full-subset.json"
+    head -n "$train_size" "$train_file" > "$temp_train"
+    temp_train_neg="$shuffled_data_path/train-neg-im-full-subset.json"
+    head -n "$train_size" "$train_neg_file" > "$temp_train_neg"
+    # Shuffle this subset file.
+    train_file="$temp_train"
+    train_neg_file="$temp_train_neg"
+    for (( i=0; i<$epochs; i+=1 )); do
+        # Shuffle the negative and positive file with the same random seed
+        # so individual examples are aligned.
+        randomseed=$RANDOM
+        fname="$shuffled_data_path/train-im-full-$i.json"
+        shuf --random-source=<(get_seeded_random $randomseed) "$train_file" --output="$fname"
+        echo "Created: $fname"
+        fname="$shuffled_data_path/train-neg-im-full-$i.json"
+        shuf --random-source=<(get_seeded_random $randomseed) "$train_neg_file" --output="$fname"
+        echo "Created: $fname"
+    done
+fi
 
 script_name="main_frame"
 source_path="$CUR_PROJ_DIR/src/learning"
