@@ -163,25 +163,27 @@ class GenericTrainer:
                     dev_loss = pu.batched_loss(
                         model=self.model, batcher=self.batcher, batch_size=self.batch_size,
                         ex_fnames=self.dev_fnames, num_examples=self.num_dev)
-                    if type(dev_loss) == str:
-                        dev_loss = float(dev_loss)
                     dev_end = time.time()
                     total_time_per_dev += dev_end-dev_start
                     self.dev_score_history.append(dev_loss)
                     self.dev_checked_iters.append(iteration)
                     self.loss_history.append(loss)
                     self.loss_checked_iters.append(iteration)
+                    if type(dev_loss) == str:
+                        dev_loss = float(dev_loss)
                     if dev_loss < best_dev_loss:
                         best_dev_loss = dev_loss
                         # Deep copy so you're not just getting a reference.
                         best_params = copy.deepcopy(self.model.state_dict())
                         best_epoch = epoch
                         best_iter = iteration
+                        print(type(dev_loss))
                         everything = (epoch, iteration, self.total_iters, dev_loss)
                         if self.verbose:
                             logging.info('Current best model; Epoch {:d}; '
                                          'Iteration {:d}/{:d}; Dev loss: {:.4f}'.format(*everything))
                     else:
+                        print(type(dev_loss))
                         everything = (epoch, iteration, self.total_iters, dev_loss)
                         if self.verbose:
                             logging.info('Epoch {:d}; Iteration {:d}/{:d}; Dev loss: {:.4f}'.format(*everything))
