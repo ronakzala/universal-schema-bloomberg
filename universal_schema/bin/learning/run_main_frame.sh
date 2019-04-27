@@ -55,7 +55,7 @@ source "$hparam_config"
 run_time=`date '+%Y_%m_%d-%H_%M_%S'`
 int_mapped_path="$CUR_PROJ_DIR/datasets_proc/${dataset}/${experiment}"
 
- Create shuffled copies of the dataset; one for each epoch.
+# Create shuffled copies of the dataset; one for each epoch.
 if [[ $action == 'train_model' ]]; then
     train_file="$int_mapped_path/train-im-full.json"
     train_neg_file="$int_mapped_path/train-neg-im-full.json"
