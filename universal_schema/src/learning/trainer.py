@@ -163,6 +163,8 @@ class GenericTrainer:
                     dev_loss = pu.batched_loss(
                         model=self.model, batcher=self.batcher, batch_size=self.batch_size,
                         ex_fnames=self.dev_fnames, num_examples=self.num_dev)
+                    if type(dev_loss) == str:
+                        dev_loss = float(dev_loss)
                     dev_end = time.time()
                     total_time_per_dev += dev_end-dev_start
                     self.dev_score_history.append(dev_loss)
