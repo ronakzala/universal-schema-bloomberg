@@ -2,6 +2,7 @@ import os
 import numpy as np
 import h5py
 import json
+import random
 
 '''
 Eval Set construction for each Congress:
@@ -43,7 +44,7 @@ for congress in ["106", "107", "108", "109"]:
 
 	data_file = h5py.File("../data/%s.hdf5" % congress, 'r')
 
-	big_matrix_train_cp = data_file['big_matrix_train_out'][0]
+	big_matrix_train_cp = data_file['vote_matrix_train']
 	counts = np.count_nonzero(big_matrix_train_cp, axis=0)
 	print(len(counts))
 
@@ -64,6 +65,14 @@ for congress in ["106", "107", "108", "109"]:
 
 	eval_info[congress]["limited_data"] = [cp_list[i] for i in list_less_count_indices]
 
+	allowed_senate_indices = list(set(dict_indices[int(congress)]["senate"]) - set(list_less_count_indices))
+	allowed_house_indices = list(set(dict_indices[int(congress)]["house"]) - set(list_less_count_indices))
+	senate_eval_indices = random.sample(allowed_senate_indices, 6)
+	house_eval_indices = random.sample(allowed_house_indices, 14)
+
+	eval_info[congress]["no_data"] = [cp_list[i] for i in senate_eval_indices + house_eval_indices]
+
+'''
 eval_info["109"]["no_data"] = [
 	"LindseyGraham Republican",
 	"BarackObama Democrat",
@@ -155,7 +164,7 @@ eval_info["106"]["no_data"] = [
 	"C.Cox Republican",
 	"MichaelBilirakis Republican"
 ]
-
+'''
 
 with open("../data/preprocessing_metadata/eval_info.json", 'w') as out_f:
 	json.dump(eval_info, out_f, indent=4)
