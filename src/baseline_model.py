@@ -19,7 +19,7 @@ parser.add_argument('--dp', default='10', help='dp size')
 parser.add_argument('--modelpath', default='', help='model path')
 parser.add_argument('--congress', default='106', help='congress session')
 parser.add_argument('--runeval', default=True, help='Run full eval', type=bool)
-
+parser.add_argument('--lognum', default='', help='Log Num to avoid duplication')
 
 class BillModel(nn.Module):
 	def __init__(self, embedding_matrix, model_params):
@@ -85,10 +85,11 @@ def main():
 		"word_embed_len": 50,
 		"num_cp": data_file['num_cp'][0],
 		"congress": opt.congress,
-		"full_eval": opt.runeval
+		"full_eval": opt.runeval,
+		"lognum": opt.lognum
 	}
 
-	logging.basicConfig(filename='log_files/baseline_%s.log' % log_name, filemode='w', level=logging.DEBUG)
+	logging.basicConfig(filename='log_files/baseline_%s_%s.log' % (log_name, model_params["lognum"]), filemode='w', level=logging.DEBUG)
 	logging.info("Number of bills: %d" % num_bills)
 	logging.info("Baseline accuracy: %f" % get_baseline(np.array(vote_matrix_train), np.array(vote_matrix_val), np.array(vote_matrix_test)))
 
@@ -219,7 +220,7 @@ def train_nn_embed_m(bill_matrix_train, vote_matrix_train, bill_matrix_test, vot
 					loss.backward()
 					optimizer.step()
 
-	model_path = "saved_models/baseline" + time.strftime("%Y%m%d-%H-%M-%S") + "_" + model_params["congress"]  + ".pt"
+	model_path = "saved_models/baseline" + time.strftime("%Y%m%d-%H-%M-%S") + "_" + model_params["congress"] + "_" + model_params["lognum"] + ".pt"
 	torch.save(model, model_path)
 	logging.info("Saved model to: %s" % model_path)
 

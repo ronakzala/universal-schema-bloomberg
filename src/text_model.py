@@ -29,6 +29,7 @@ parser.add_argument('--textfile', default='', help='text data file')
 parser.add_argument('--modeltype', default='glove', help='glove or bag')
 parser.add_argument('--congress', default='106', help='congress session')
 parser.add_argument('--runeval', default=False, type=boolean_string, help='Run full eval')
+parser.add_argument('--lognum', default='', help='Log num to avoid duplication')
 
 
 class BillModel(nn.Module):
@@ -122,11 +123,12 @@ def main():
 		"congress": opt.congress,
 		"model_type": opt.modeltype,
 		"full_eval": opt.runeval,
-		"make_plots": True,
-		"debug": True
+		"make_plots": False,
+		"debug": False,
+		"lognum": opt.lognum
 	}
 
-	log_file = "text_model_%s_%s_%s.log" % (opt.congress, opt.modeltype, 'eval' if model_params["full_eval"] else 'no_eval')
+	log_file = "text_model_%s_%s_%s_%s.log" % (opt.congress, opt.modeltype, 'eval' if model_params["full_eval"] else 'no_eval', model_params["lognum"])
 	if model_params["debug"]:
 		logging.basicConfig(level=logging.DEBUG)
 	else:
@@ -286,7 +288,7 @@ def train_nn_embed_m(bill_matrix_train, vote_matrix_train, bill_matrix_test, vot
 					loss.backward()
 					optimizer.step()
 
-	model_path = "saved_models/text_" + time.strftime("%Y%m%d-%H-%M-%S") + "_" + model_params["congress"] + ".pt"
+	model_path = "saved_models/text_" + time.strftime("%Y%m%d-%H-%M-%S") + "_" + model_params["congress"] + "_" + model_params["lognum"] + ".pt"
 	torch.save(model, model_path)
 	logging.info("Saved model to: %s" % model_path)
 
