@@ -169,6 +169,8 @@ class GenericTrainer:
                     self.dev_checked_iters.append(iteration)
                     self.loss_history.append(loss)
                     self.loss_checked_iters.append(iteration)
+                    if type(dev_loss) == torch.Tensor:
+                        dev_loss = float(dev_loss.item())
                     if dev_loss < best_dev_loss:
                         best_dev_loss = dev_loss
                         # Deep copy so you're not just getting a reference.
