@@ -25,7 +25,6 @@ parser.add_argument('--eta', default='0.0001', help='learning rate')
 parser.add_argument('--nepochs', default='20', help='number of epochs')
 parser.add_argument('--dp', default='10', help='dp size')
 parser.add_argument('--modelpath', default='', help='model path')
-parser.add_argument('--textfile', default='', help='text data file')
 parser.add_argument('--congress', default='106', help='congress session')
 parser.add_argument('--runeval', default=False, type=boolean_string, help='Run full eval')
 parser.add_argument('--lognum', default='', help='Log num to avoid duplication')
@@ -62,11 +61,12 @@ class BillModel(nn.Module):
 		)
 		# Embedding layer for US relations
 		self.embedding_relations = nn.Embedding(
-			model_params["num_rels"],
+			model_params["num_rel"],
 			model_params["rel_size"],
 			_weight=rel_embeddings
 		)
 		self.sigmoid = nn.Sigmoid()
+		self.emb_size = model_params["dp_size"]
 		nn.init.uniform_(self.linear1.weight, -0.01, 0.01)
 		nn.init.uniform_(self.linear2.weight, -0.01, 0.01)
 		nn.init.uniform_(self.embedding2.weight, -0.01, 0.01)
@@ -77,21 +77,28 @@ class BillModel(nn.Module):
 		y1 = self.embedding1(x0)
 		y1 = y1.mean(0)
 		y1 = self.linear1(y1)
+		
 		# Transform CP index to CP embedding
 		x1 = x[1].long()
 		y2 = self.embedding2(x1)
 		y2 = y2.view(y2.size(1))
-		# Transform relations into CP space
-		x2 = x[2].long()
-		rels = x2[:, 0]
-		ents = x2[:, 1]
+		
+		# US Specific - Feedforward Network
+		rel_ents = x[2].long()
+		scores = x[3].double()
+		rels = rel_ents[:, 0]
+		ents = rel_ents[:, 1]
 		rel_embs = self.embedding_relations(rels)
 		ent_embs = self.embedding_entities(ents)
-		transformed = self.linear2(torch.cat((rel_embs, ent_embs), 1))
-		vnus = torch.mean((torch.transpose(transformed) * x[3].double()), 1)
+		# Concatenate rel+ent and pass through a linear layer with tanh non-linearity
+		transformed = torch.tanh(self.linear2(torch.cat((rel_embs, ent_embs), 1)))
+		# Transpose the output and multiple with scores (Gives a weird column wise multiplication afaik)
+		# Finally calculate mean across rows to get a single column
+		vnus = torch.mean((transformed.transpose(0, 1) * scores), 1)
+		
 		# Add dot(v_b, v_c) and dot(v_b, v_text)
 		y4 = torch.dot(y1, y2)
-		y5 = torch.dot(y1, y3)
+		y5 = torch.dot(y1, vnus)
 		y6 = torch.add(y4, y5)
 		y = self.sigmoid(y6)
 		
@@ -106,9 +113,19 @@ def main():
 	opt = parser.parse_args()
 	data_file = h5py.File(opt.datafile, 'r')
 
+	# Read in the learned embeddings from the latest universal schema model
+	# These embeddings have been placed in this location locally, not pushed to the repo
 	rel_array = np.load('../data/learnt_row_embeddings.npy')
 	ent_array = np.load('../data/learnt_col_embeddings.npy')
+
+	# Append a final row to both arrays which serves as the dummy rel, ent
+	rel_array = np.append(rel_array, np.zeros((1, rel_array.shape[1])), axis=0)
+	ent_array = np.append(ent_array, np.zeros((1, ent_array.shape[1])), axis=0)
+	rel_array = torch.tensor(rel_array)
+	ent_array = torch.tensor(ent_array)
 	
+	# Convert all scores from str to float, and change lists to np arrays
+	# pol_to_pairs contains a mapping of cp to list of rel, ent, scores
 	with open("../data/congressperson_data/pol_to_pairs.json") as f:
 		pol_to_pairs = json.load(f)
 	for k in pol_to_pairs.keys():
@@ -128,6 +145,7 @@ def main():
 	embedding_matrix = torch.tensor(embedding_matrix)
 	num_bills = data_file['num_bills'][0]
 
+	# Create dict of all usable param values
 	model_params = {
 		"nepochs": int(opt.nepochs),
 		"eta": float(opt.eta),
@@ -147,14 +165,11 @@ def main():
 		"lognum": opt.lognum
 	}
 
-	log_file = "us_model_%s_%s_%s_%s.log" % (opt.congress, opt.modeltype, 'eval' if model_params["full_eval"] else 'no_eval', model_params["lognum"])
+	log_file = "us_model_%s_%s_%s.log" % (opt.congress, 'eval' if model_params["full_eval"] else 'no_eval', model_params["lognum"])
 	if model_params["debug"]:
 		logging.basicConfig(level=logging.DEBUG)
 	else:
 		logging.basicConfig(filename='log_files/%s' % log_file, filemode='w', level=logging.DEBUG)
-
-	if text_features.shape[0] != data_file['num_cp'][0]:
-		logging.warning("Number of politicians does not match: %d, %d" % (text_features.shape[0], data_file['num_cp'][0]))
 
 	logging.info("Number of bills: %d" % num_bills)
 	logging.info("Baseline accuracy: %f" % get_baseline(np.array(vote_matrix_train), np.array(vote_matrix_val), np.array(vote_matrix_test)))
@@ -195,7 +210,7 @@ def main():
 
 def make_sparse_list_input(inp):
 	'''
-	Process input for model
+	Makes list of indices to index into embedding matrix
 	:param inp
 	'''
 	retset = {}
@@ -214,13 +229,17 @@ def make_sparse_list_input(inp):
 
 def evaluate_predictions(model, bill_matrix, vote_matrix, pol_to_pairs, val=True, congress='106', epoch=1, full_eval=False):
 	bill_matrix = make_sparse_list_input(bill_matrix)
-	predictions = get_predictions(model, vote_matrix, bill_matrix, pol_to_pairs)
+	# Get predictions for the test set
+	predictions = get_predictions(model, vote_matrix, bill_matrix, pol_to_pairs, congress)
+	
+	# Use predictions to calculate accuracy stats for the whole test set
 	accuracy, precision, recall, f1 = get_accuracy_stats(np.array(vote_matrix), predictions)
 	logging.info("%s Accuracy: %.6f" % ("Val" if val else "Test", accuracy))	
 	logging.info("Precision %.6f, Recall %.6f, F1 %.6f" % (precision, recall, f1))
 	if val or not full_eval:		
 		return accuracy, predictions
 
+	# Do the rest only if eval is switched on
 	with open("../data/preprocessing_metadata/eval_info.json", 'r') as infile:
 		eval_set = json.load(infile)
 	with open("../data/preprocessing_metadata/cp_info_%s.txt" % congress, 'r') as cp_file:
@@ -271,6 +290,7 @@ def train_nn_embed_m(bill_matrix_train, vote_matrix_train, bill_matrix_test, vot
 	device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 	model.to(device)
 	
+	# Need cp_info to map from indices in the training loop to cp names in pol_to_pairs
 	with open("../data/preprocessing_metadata/cp_info_%s.txt" % model_params["congress"], 'r') as cp_file:
 		cp_info = cp_file.readlines()
 	cp_info = [' '.join(x.strip().split()[:-1]) for x in cp_info]
@@ -325,11 +345,11 @@ def train_nn_embed_m(bill_matrix_train, vote_matrix_train, bill_matrix_test, vot
 	return model
 
 
-def get_predictions(model, vote_matrix, bill_matrix, pol_to_pairs):
+def get_predictions(model, vote_matrix, bill_matrix, pol_to_pairs, congress):
 	device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 	model.to(device)
 	
-	with open("../data/preprocessing_metadata/cp_info_%s.txt" % model_params["congress"], 'r') as cp_file:
+	with open("../data/preprocessing_metadata/cp_info_%s.txt" % congress, 'r') as cp_file:
 		cp_info = cp_file.readlines()
 	cp_info = [' '.join(x.strip().split()[:-1]) for x in cp_info]
 	

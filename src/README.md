@@ -17,3 +17,9 @@ Unzip the glove_text_files.zip or text_feature_files.zip in the data directory, 
 python text_model.py --datafile ../data/106.hdf5 --textfile ../data/106_text_bag.hdf5 --classifier nn_embed_m_nocv --eta 0.1 --nepochs 10 --dp 10 --modeltype bag --congress 106 --runeval True
 ```
 To test an existing model, run the above command but add the ``` --modelpath <path to saved model> ``` parameter.
+# Universal Schema Model
+This model uses the same zip files as the baseline model, but additionally needs the pol_to_pairs.json file and learned embedding matrices from the universal schema model.
+## Running the model
+```
+python us_model.py --datafile ../data/106_no_eval.hdf5 --classifier nn_embed_m_nocv --eta 0.1 --nepochs 10 --dp 10 --congress 106 --lognum 1
+```
