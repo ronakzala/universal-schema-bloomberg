@@ -126,7 +126,7 @@ def main():
 		"make_plots": False,
 		"debug": False,
 		"lognum": opt.lognum,
-		"identifier": 'text_model%s_%s_%s_%s' % (opt.congress, opt.modeltype, 'eval' if model_params["full_eval"] else "no_eval", opt.lognum)
+		"identifier": 'text_model%s_%s_%s_%s' % (opt.congress, opt.modeltype, 'eval' if opt.runeval else "no_eval", opt.lognum)
 	}
 	if not os.path.exists("./saved_models"):
 		os.mkdir("./saved_models")

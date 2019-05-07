@@ -163,7 +163,7 @@ def main():
 		"make_plots": False,
 		"debug": False,
 		"lognum": opt.lognum,
-		"identifier": 'us_model_%s_%s_%s' % (opt.congress, 'eval' if model_params["full_eval"] else 'no_eval', opt.lognum)
+		"identifier": 'us_model_%s_%s_%s' % (opt.congress, 'eval' if opt.runeval else 'no_eval', opt.lognum)
 	}
 
 	if not os.path.exists("./saved_models"):
