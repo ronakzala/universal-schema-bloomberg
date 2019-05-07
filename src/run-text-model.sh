@@ -10,6 +10,7 @@
 #SBATCH --mem-per-cpu=4000    # Memory in MB per cpu allocated
 
 module add cuda90/toolkit/9.0.176
+source activate cs696
 python text_model.py --datafile ../data/106_no_eval.hdf5 --textfile ../data/106_text_bag.hdf5 --classifier nn_embed_m_nocv --eta 0.1 --nepochs 10 --dp 10 --modeltype bag --congress 106 --lognum 1
 python text_model.py --datafile ../data/106_no_eval.hdf5 --textfile ../data/106_text_bag.hdf5 --classifier nn_embed_m_nocv --eta 0.1 --nepochs 10 --dp 10 --modeltype bag --congress 106 --lognum 2
 python text_model.py --datafile ../data/106_no_eval.hdf5 --textfile ../data/106_text_bag.hdf5 --classifier nn_embed_m_nocv --eta 0.1 --nepochs 10 --dp 10 --modeltype bag --congress 106 --lognum 3
