@@ -169,9 +169,10 @@ def main():
 
 	_, predictions = evaluate_predictions(
 		nn_model, bill_matrix_test, vote_matrix_test, text_features, False, opt.congress, full_eval=model_params["full_eval"])
-
+	'''
 	if model_params["make_plots"]:
 		evaluation_plots.make_plots(nn_model, vote_matrix_test, bill_matrix_test, text_features, predictions, opt.congress)
+	'''
 
 
 def make_sparse_list_input(inp):
