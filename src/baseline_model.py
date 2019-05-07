@@ -7,7 +7,7 @@ import logging
 
 import torch
 import torch.nn as nn
-
+import shutil
 import time
 
 parser = argparse.ArgumentParser()
@@ -86,9 +86,14 @@ def main():
 		"num_cp": data_file['num_cp'][0],
 		"congress": opt.congress,
 		"full_eval": opt.runeval,
-		"lognum": opt.lognum
+		"lognum": opt.lognum,
+		"identifier": 'baseline_%s_%s' % (log_name, opt.lognum)
 	}
 
+	if not os.path.exists("./saved_models"):
+		os.mkdir("./saved_models")
+	if not os.path.exists("./log_files"):
+		os.mkdir("./log_files")
 	logging.basicConfig(filename='log_files/baseline_%s_%s.log' % (log_name, model_params["lognum"]), filemode='w', level=logging.DEBUG)
 	logging.info("Number of bills: %d" % num_bills)
 	logging.info("Baseline accuracy: %f" % get_baseline(np.array(vote_matrix_train), np.array(vote_matrix_val), np.array(vote_matrix_test)))
@@ -186,6 +191,9 @@ def train_nn_embed_m(bill_matrix_train, vote_matrix_train, bill_matrix_test, vot
 		-> Sigmoid brings it between [0, 1]
 
 	'''
+	if not os.path.exists(model_params["identifier"]):
+		os.mkdir("temp_models_%s" % model_params["identifier"])
+
 	model = BillModel(embedding_matrix, model_params)
 	model = model.double()
 	logging.info("Using: %s" % "cuda" if torch.cuda.is_available() else "cpu")
@@ -197,11 +205,13 @@ def train_nn_embed_m(bill_matrix_train, vote_matrix_train, bill_matrix_test, vot
 
 	bill_matrix_train = make_sparse_list_input(bill_matrix_train)
 	val_accuracy = 0.0
+	flag = False
 	for ep in range(model_params["nepochs"]):
 		logging.info("Epoch: %d -------------------------" % ep)
 		new_accuracy = evaluate_predictions(
 			model, bill_matrix_test, vote_matrix_test, True, model_params["congress"], epoch=ep, full_eval=model_params["full_eval"])
 		if new_accuracy < val_accuracy:
+			flag = True
 			break
 		val_accuracy = new_accuracy
 		for i in range(vote_matrix_train.shape[0]):
@@ -219,6 +229,15 @@ def train_nn_embed_m(bill_matrix_train, vote_matrix_train, bill_matrix_test, vot
 					loss = nll(pred, y)
 					loss.backward()
 					optimizer.step()
+		temp_model_path = "temp_models_%s/epoch_%d.pt" % (model_params["identifier"], ep)
+		torch.save(model, temp_model_path)
+
+	if flag:
+		logging.info("Loading model from epoch %d" % (ep - 1))
+		model = torch.load("temp_models_%s/epoch_%d.pt" % (model_params["identifier"], ep - 1))
+		model.eval()
+	if os.path.exists("temp_models_%s" % model_params["identifier"]):
+		shutil.rmtree("temp_models_%s" % model_params["identifier"])
 
 	model_path = "saved_models/baseline" + time.strftime("%Y%m%d-%H-%M-%S") + "_" + model_params["congress"] + "_" + model_params["lognum"] + ".pt"
 	torch.save(model, model_path)

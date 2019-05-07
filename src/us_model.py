@@ -4,7 +4,7 @@ import os
 import numpy as np
 import json
 import logging
-
+import shutil
 import torch
 import torch.nn as nn
 
@@ -162,14 +162,19 @@ def main():
 		"full_eval": opt.runeval,
 		"make_plots": False,
 		"debug": False,
-		"lognum": opt.lognum
+		"lognum": opt.lognum,
+		"identifier": 'us_model_%s_%s_%s' % (opt.congress, 'eval' if model_params["full_eval"] else 'no_eval', opt.lognum)
 	}
 
-	log_file = "us_model_%s_%s_%s.log" % (opt.congress, 'eval' if model_params["full_eval"] else 'no_eval', model_params["lognum"])
+	if not os.path.exists("./saved_models"):
+		os.mkdir("./saved_models")
+	if not os.path.exists("./log_files"):
+		os.mkdir("./log_files")
+
 	if model_params["debug"]:
 		logging.basicConfig(level=logging.DEBUG)
 	else:
-		logging.basicConfig(filename='log_files/%s' % log_file, filemode='w', level=logging.DEBUG)
+		logging.basicConfig(filename='log_files/%s.log' % model_params["identifier"], filemode='w', level=logging.DEBUG)
 
 	logging.info("Number of bills: %d" % num_bills)
 	logging.info("Baseline accuracy: %f" % get_baseline(np.array(vote_matrix_train), np.array(vote_matrix_val), np.array(vote_matrix_test)))
@@ -284,6 +289,8 @@ def train_nn_embed_m(bill_matrix_train, vote_matrix_train, bill_matrix_test, vot
 		-> Sigmoid brings it between [0, 1]
 
 	'''
+	if not os.path.exists(model_params["identifier"]):
+		os.mkdir("temp_models_%s" % model_params["identifier"])
 	model = BillModel(embedding_matrix, rel_embeddings, ent_embeddings, model_params)
 	model = model.double()
 	logging.info("Using: %s" % "cuda" if torch.cuda.is_available() else "cpu")
@@ -300,6 +307,7 @@ def train_nn_embed_m(bill_matrix_train, vote_matrix_train, bill_matrix_test, vot
 
 	bill_matrix_train = make_sparse_list_input(bill_matrix_train)
 	val_accuracy = 0.0
+	flag = False
 	for ep in range(model_params["nepochs"]):
 		logging.info("Epoch: %d -------------------------" % ep)
 		new_accuracy, _ = evaluate_predictions(
@@ -313,6 +321,7 @@ def train_nn_embed_m(bill_matrix_train, vote_matrix_train, bill_matrix_test, vot
 			full_eval=model_params["full_eval"]
 		)
 		if new_accuracy < val_accuracy:
+			flag = True
 			break
 		val_accuracy = new_accuracy
 
@@ -337,6 +346,16 @@ def train_nn_embed_m(bill_matrix_train, vote_matrix_train, bill_matrix_test, vot
 					loss = nll(pred, y)
 					loss.backward()
 					optimizer.step()
+
+		temp_model_path = "temp_models_%s/epoch_%d.pt" % (model_params["identifier"], ep)
+		torch.save(model, temp_model_path)
+
+	if flag:
+		logging.info("Loading model from epoch %d" % (ep - 1))
+		model = torch.load("temp_models_%s/epoch_%d.pt" % (model_params["identifier"], ep - 1))
+		model.eval()
+	if os.path.exists("temp_models_%s" % model_params["identifier"]):
+		shutil.rmtree("temp_models_%s" % model_params["identifier"])
 
 	model_path = "saved_models/us_" + time.strftime("%Y%m%d-%H-%M-%S") + "_" + model_params["congress"] + "_" + model_params["lognum"] + ".pt"
 	torch.save(model, model_path)
