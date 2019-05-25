@@ -15,6 +15,108 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 
 
+def performance_vs_record_length(model, vote_matrix, bill_matrix, vote_train, predictions, parties, congress_num):
+	yes_and_no_votes = vote_matrix[:, :]
+	yes_and_no_votes[yes_and_no_votes == 1] = 0
+	length_of_records = np.count_nonzero(yes_and_no_votes, axis=0)
+
+	yes_and_no_votes_train = vote_train[:, :]
+	yes_and_no_votes_train[yes_and_no_votes_train == 1] = 0
+	length_of_records_train = np.count_nonzero(yes_and_no_votes_train, axis=0)
+
+	per_politician_accuracies = [0] * vote_matrix.shape[1]
+	
+	for i in range(vote_matrix.shape[0]):
+		for j in range(vote_matrix.shape[1]):
+			if vote_matrix[i][j] > 1:
+				if predictions[i, j] == vote_matrix[i][j]:
+					per_politician_accuracies[j] += 1
+
+	normalized_accuracies = np.divide(np.array(per_politician_accuracies), length_of_records)
+	plt.clf()
+	plt.figure()
+	plt.margins(0.05) # Optional, just adds 5% padding to the autoscaling
+	    
+	plt.plot(normalized_accuracies, length_of_records_train, marker='o', linestyle='', ms=6)
+
+	figure_path = "figures/%s_performance_vs_record_length.png" % congress_num 
+	plt.savefig(figure_path)
+	logging.info("Saved to: %s" % figure_path)
+
+	return normalized_accuracies
+
+
+def get_voting_breakup(vote_matrix, congress_num, cp_party_info):
+	party_votes_dict = {idx: {'Republican': 0, 'Democrat': 0, 'Independent': 0} for idx in range(vote_matrix.shape[0])}
+	
+	for i in range(vote_matrix.shape[0]):
+		rep = [0, 0]
+		dem = [0, 0]
+		ind = [0, 0]
+		for j in range(vote_matrix.shape[1]):
+			if vote_matrix[i][j] == 3:
+				if cp_party_info[j] == 'Republican':
+					rep = [rep[0] + 1, rep[1] + 1]
+				if cp_party_info[j] == 'Democrat':
+					dem = [dem[0] + 1, dem[1] + 1]
+				else:
+					ind = [ind[0] + 1, ind[1] + 1]
+			elif vote_matrix[i][j] == 2:
+				if cp_party_info[j] == 'Republican':
+					rep = [rep[0], rep[1] + 1]
+				if cp_party_info[j] == 'Democrat':
+					dem = [dem[0], dem[1] + 1]
+				else:
+					ind = [ind[0], ind[1] + 1]
+		if rep[0] > (rep[1] // 2):
+			party_votes_dict[i]['Republican'] = 3
+		else:
+			party_votes_dict[i]['Republican'] = 2
+		if dem[0] > (dem[1] // 2):
+			party_votes_dict[i]['Democrat'] = 3
+		else:
+			party_votes_dict[i]['Democrat'] = 2
+		if ind[0] > (ind[1] // 2):
+			party_votes_dict[i]['Independent'] = 3
+		else:
+			party_votes_dict[i]['Independent'] = 2
+
+	return party_votes_dict
+
+
+def party_majority_baseline(vote_matrix, congress_num, accuracies):
+	with open("../data/preprocessing_metadata/cp_info_%s.txt" % congress_num, 'r') as cp_file:
+		cp_info = cp_file.readlines()
+	cp_party_info = [x.strip().split()[-1] for x in cp_info]
+
+	if os.path.exists("../data/preprocessing_metadata/majority_vote_info_%s.json" % congress_num):
+		with open("../data/preprocessing_metadata/majority_vote_info_%s.json" % congress_num, 'r') as json_file:
+			party_votes_dict = json.load(json_file)
+	else:
+		party_votes_dict = get_voting_breakup(vote_matrix, congress_num, cp_party_info)
+		
+		with open("../data/preprocessing_metadata/majority_vote_info_%s.json" % congress_num, 'w') as json_file:
+			json.dump(party_votes_dict, json_file, indent=4)
+
+	logging.info("%s" % party_votes_dict)
+
+	yes_and_no_votes = vote_matrix[:, :]
+	yes_and_no_votes[yes_and_no_votes == 1] = 0
+	length_of_records = np.count_nonzero(yes_and_no_votes, axis=0)
+
+	per_politician_accuracies = [0] * vote_matrix.shape[1]
+	
+	for i in range(vote_matrix.shape[0]):
+		for j in range(vote_matrix.shape[1]):
+			if vote_matrix[i][j] == party_votes_dict[i][cp_party_info[i]]:
+				per_politician_accuracies[j] += 1
+				
+	normalized_accuracies = np.divide(np.array(per_politician_accuracies), length_of_records)
+
+	for cp, acc, acc_real in zip(cp_info, normalized_accuracies, accuracies):
+		logging.info("%s: %f, %f" % (cp, acc, acc_real))
+
+
 def cluster_congress(model, congress_num):
 	with open("../data/preprocessing_metadata/cp_info_%s.txt" % congress_num, 'r') as cp_file:
 		cp_info = cp_file.readlines()
@@ -32,6 +134,7 @@ def cluster_congress(model, congress_num):
 
 	groups = df.groupby('label')
 
+	plt.clf()
 	plt.figure()
 	plt.margins(0.05) # Optional, just adds 5% padding to the autoscaling
 	for name, group in groups:
@@ -92,9 +195,18 @@ def top_words_per_party(model, vote_matrix, bill_matrix, predictions, parties, c
 	return
 
 
-def make_plots(model, vote_matrix, bill_matrix, text_features, predictions, congress_num='106'):
+def compare_majority_with_trained_model(model, vote_matrix, bill_matrix, vote_train, text_features, predictions, congress_num='106'):
+	with open("../data/preprocessing_metadata/cp_info_%s.txt" % congress_num, 'r') as cp_file:
+		cp_info = cp_file.readlines()
+	parties = [x.strip().split()[-1] for x in cp_info]
+	accuracies = performance_vs_record_length(model, vote_matrix, bill_matrix, vote_train, predictions, parties, congress_num)
+	party_majority_baseline(vote_matrix, congress_num, accuracies)
+
+
+def make_plots(model, vote_matrix, bill_matrix, vote_train, text_features, predictions, congress_num='106'):
 	logging.basicConfig(level=logging.DEBUG)
 	parties = cluster_congress(model, congress_num)
-	top_words_per_party(model, vote_matrix, bill_matrix, predictions, parties, congress_num)
+	#top_words_per_party(model, vote_matrix, bill_matrix, predictions, parties, congress_num)
+	accuracies = performance_vs_record_length(model, vote_matrix, bill_matrix, vote_train, predictions, parties, congress_num)
 
 	return
