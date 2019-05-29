@@ -53,23 +53,38 @@ class BillModel(nn.Module):
 			model_params["num_cp"],
 			model_params["dp_size"]
 		)	
+		self.multi1 = nn.Linear(
+			model_params["ent_size"] + model_params["rel_size"],
+			30
+		)
+		self.multi2 = nn.Linear(
+			30,
+			model_params["dp_size"]
+		)
 		# Embedding layer for US entities
 		self.embedding_entities = nn.Embedding(
 			model_params["num_ent"],
 			model_params["ent_size"],
+			# Comment out below for FREEBASE ONLY
 			_weight=ent_embeddings
 		)
 		# Embedding layer for US relations
 		self.embedding_relations = nn.Embedding(
 			model_params["num_rel"],
 			model_params["rel_size"],
+			# Comment out below for FREEBASE ONLY
 			_weight=rel_embeddings
 		)
 		self.sigmoid = nn.Sigmoid()
 		self.emb_size = model_params["dp_size"]
 		nn.init.uniform_(self.linear1.weight, -0.01, 0.01)
 		nn.init.uniform_(self.linear2.weight, -0.01, 0.01)
+		nn.init.uniform_(self.multi1.weight, -0.01, 0.01)
+		nn.init.uniform_(self.multi2.weight, -0.01, 0.01)
 		nn.init.uniform_(self.embedding2.weight, -0.01, 0.01)
+		# Comment out below unless using FREEBASE ONLY
+		#nn.init.uniform_(self.embedding_relations.weight, -0.01, 0.01)
+		#nn.init.uniform_(self.embedding_entities.weight, -0.01, 0.01)
         
 	def forward(self, x):
 		# Transform bill text into CP space
@@ -91,10 +106,15 @@ class BillModel(nn.Module):
 		rel_embs = self.embedding_relations(rels)
 		ent_embs = self.embedding_entities(ents)
 		# Concatenate rel+ent and pass through a linear layer with tanh non-linearity
+		#hidden = torch.tanh(self.multi1(torch.cat((rel_embs, ent_embs), 1)))
+		#transformed = torch.tanh(self.multi2(hidden))
+		# Comment out below line and uncomment above 2 for multilayer
 		transformed = torch.tanh(self.linear2(torch.cat((rel_embs, ent_embs), 1)))
 		# Transpose the output and multiple with scores (Gives a weird column wise multiplication afaik)
 		# Finally calculate mean across rows to get a single column
 		vnus = torch.mean((transformed.transpose(0, 1) * scores), 1)
+		# Comment out above line and uncomment below line for FREEBASE ONLY
+		#vnus = torch.mean(transformed.transpose(0, 1), 1)
 		
 		# Add dot(v_b, v_c) and dot(v_b, v_text)
 		y4 = torch.dot(y1, y2)
@@ -115,8 +135,12 @@ def main():
 
 	# Read in the learned embeddings from the latest universal schema model
 	# These embeddings have been placed in this location locally, not pushed to the repo
-	rel_array = np.load('../data/learnt_row_embeddings.npy')
-	ent_array = np.load('../data/learnt_col_embeddings.npy')
+	# For FREEBASE ONLY
+	#rel_array = np.load('../data/learnt_row_embeddings.npy' % opt.congress)
+	#ent_array = np.load('../data/learnt_col_embeddings.npy' % opt.congress)
+	#
+	rel_array = np.load('../data/us_%s/learnt_row_embeddings.npy' % opt.congress)
+	ent_array = np.load('../data/us_%s/learnt_col_embeddings.npy' % opt.congress)
 
 	# Append a final row to both arrays which serves as the dummy rel, ent
 	rel_array = np.append(rel_array, np.zeros((1, rel_array.shape[1])), axis=0)
@@ -126,7 +150,8 @@ def main():
 	
 	# Convert all scores from str to float, and change lists to np arrays
 	# pol_to_pairs contains a mapping of cp to list of rel, ent, scores
-	with open("../data/congressperson_data/pol_to_pairs.json") as f:
+	#with open("../data/congressperson_data/pol_to_pairs.json") as f:
+	with open("../data/congressperson_data/pol_to_pairs/pol_to_pairs_%s.json" % opt.congress) as f:
 		pol_to_pairs = json.load(f)
 	for k in pol_to_pairs.keys():
 		pol_to_pairs[k]['pairs'] = np.array(pol_to_pairs[k]['pairs'])

@@ -126,7 +126,7 @@ def main():
 		"make_plots": False,
 		"debug": False,
 		"lognum": opt.lognum,
-		"identifier": 'text_model%s_%s_%s_%s' % (opt.congress, opt.modeltype, 'eval' if opt.runeval else "no_eval", opt.lognum)
+		"identifier": 'text_model_%s_%s_%s_%s' % (opt.congress, opt.modeltype, 'eval' if opt.runeval else "no_eval", opt.lognum)
 	}
 	if not os.path.exists("./saved_models"):
 		os.mkdir("./saved_models")
@@ -298,8 +298,8 @@ def train_nn_embed_m(bill_matrix_train, vote_matrix_train, bill_matrix_test, vot
 					loss.backward()
 					optimizer.step()
 
-	temp_model_path = "temp_models_%s/epoch_%d.pt" % (model_params["identifier"], ep)
-	torch.save(model, temp_model_path)
+		temp_model_path = "temp_models_%s/epoch_%d.pt" % (model_params["identifier"], ep)
+		torch.save(model, temp_model_path)
 
 	if flag:
 		logging.info("Loading model from epoch %d" % (ep - 1))
